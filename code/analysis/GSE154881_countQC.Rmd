@@ -1,0 +1,80 @@
+---
+title: "GSE154881"
+author: "Ben Barry"
+date: "2025-01-26"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r check-install}
+pkg <- c("SummarizedExperiment", "extraChIPs", "edgeR", "tidyverse")
+not_inst <- setdiff(pkg, rownames(installed.packages()))
+if (length(not_inst)) BiocManager::install(not_inst)
+```
+
+
+```{r load-libraries}
+library(tidyverse)
+library(extraChIPs)
+library(edgeR)
+library(magrittr)
+```
+
+
+```{r loading data}
+count_matrix <- read_tsv("/Users/benbarry/Documents/Telethon2025/data/raw/GSE154881_All_blood.txt") %>% 
+  dplyr::filter(str_starts(Geneid, "ENSG")) %>%
+  as.data.frame() %>% 
+  column_to_rownames("Geneid") %>% 
+  as.matrix() 
+keep <- rowSums(count_matrix, na.rm = TRUE) > 0 & !is.na(rowSums(count_matrix))
+
+#create a metadata table
+GSE154881_metaData <- tibble(
+  sampleName = colnames(count_matrix)
+) %>% 
+  mutate(
+    disease_state = case_when(
+      #make treatment "healthy_volunteer" if contains hv
+      grepl("HV", sampleName) ~ "healthy_volunteer", 
+      #make treatment "Diabetic_nephropathy" if contains dn
+      grepl("DN", sampleName) ~ "diabetic_nephropathy", 
+      #make treatment "type2_diabetes" if contains dn
+      grepl("T2D", sampleName) ~ "type2_diabetes" 
+    ) %>%  
+      factor(levels = c("healthy_volunteer", "type2_diabetes", "Diabetic_nephropathy"))
+  )
+```
+
+
+```{r summarised object}
+se <- SummarizedExperiment(
+  assays = list(counts = count_matrix[keep,]), # create a summarisedExperiment object
+  colData = GSE154881_metaData
+)   
+assay(se, "logCPM") <- cpm(se, log = TRUE)
+rowData(se)$detected <- se %>% 
+  cpm() %>% 
+  is_greater_than(1) %>% 
+  rowSums() %>% 
+  is_weakly_greater_than(5)
+
+se %>% 
+  subset(detected) %>% 
+  plotAssayDensities(assay = "logCPM", colour = "disease_state")
+
+```
+
+```{r}
+se %>% 
+  subset(detected) %>% 
+  plotAssayRle(assay = "logCPM", fill = "disease_state")
+```
+
+```{r}
+se %>% 
+  subset(detected) %>% 
+  plotAssayRle(assay = "logCPM", fill = "disease_state", by_x = "disease_state")
+```
