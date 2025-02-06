@@ -1,0 +1,186 @@
+---
+title: "DEGA_processed_data"
+author: "Ben Barry"
+date: "2025-02-04"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r check-install}
+pkg <- c("SummarizedExperiment", "extraChIPs", "edgeR", "tidyverse")
+not_inst <- setdiff(pkg, rownames(installed.packages()))
+if (length(not_inst)) BiocManager::install(not_inst)
+```
+
+
+```{r load-libraries}
+library(tidyverse)
+library(extraChIPs)
+library(edgeR)
+library(magrittr)
+library(patchwork)
+library(limma)
+```
+
+
+``` {r load-outlier_summarised-exp}
+SE_outlier_removed <- read_rds("/Users/benbarry/Documents/Telethon2025/data/processed/SE_outlier_removed.rds")
+
+```
+
+```{r DesignMatrix}
+# creating the design matrix for analysis
+model <- model.matrix(~ disease_state, data = colData(SE_outlier_removed))
+model
+
+#creating a contrast matrix 
+contrastMatrix <- makeContrasts(
+  T2D_v_DN = disease_statetype2_diabetes - disease_stateDiabetic_nephropathy,  
+  Hv_v_T2D = disease_statetype2_diabetes,
+  Hv_v_DN = disease_stateDiabetic_nephropathy,
+             levels = model)
+contrastMatrix
+
+SE_outlier_removed %>%
+  estimateDisp(design = model) %>%
+  plotBCV()
+
+#create a GLM QL fit - this is the recomended approach now. 
+fit <- SE_outlier_removed %>%
+  estimateDisp(design = model) %>%
+  glmQLFit(model)
+
+
+```
+
+```{r QLFTests Hv-vs-T2D}
+Hv_v_T2D <- glmQLFTest(fit, contrast = contrastMatrix[, "Hv_v_T2D"]) %>%
+  topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+Hv_v_T2D %>%
+  summarise(n = dplyr::n(),
+            .by = Significant)
+
+Hv_v_T2D %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  geom_point(aes(colour = Significant)) +
+  scale_colour_manual(values = c("black", "red"))
+    
+
+
+# using glmTreat
+Hv_v_T2D_treat <- glmTreat(fit, contrast = contrastMatrix[, "Hv_v_T2D"],  lfc = log2(1.2)) %>%
+  topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+Hv_v_T2D_treat %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  geom_point(aes(colour = Significant)) +
+  scale_colour_manual(values = c("black", "red"))
+    
+Hv_v_T2D_treat %>%
+  summarise(n = dplyr::n(),
+            .by = Significant)
+
+
+
+```
+
+```{r HV-vs-DN}
+#GLMQLFTest
+Hv_v_DN <- glmQLFTest(fit, contrast = contrastMatrix[, "Hv_v_DN"]) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+Hv_v_DN %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  geom_point(aes(colour = Significant)) +
+  scale_colour_manual(values = c("black", "red"))
+    
+Hv_v_DN %>%
+  summarise(n = dplyr::n(),
+            .by = Significant)
+
+
+
+#GLMTreat
+Hv_v_DN_treat <- glmTreat(fit, contrast = contrastMatrix[, "Hv_v_DN"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+Hv_v_DN_treat%>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  geom_point(aes(colour = Significant)) +
+  scale_colour_manual(values = c("black", "red"))
+    
+Hv_v_DN_treat%>%
+  summarise(n = dplyr::n(),
+            .by = Significant)
+
+
+```
+
+```{r T2D-vs-DN}
+#GLMQLFTest
+T2D_v_DN <- glmQLFTest(fit, contrast = contrastMatrix[, "T2D_v_DN"]) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+T2D_v_DN %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  geom_point(aes(colour = Significant)) +
+  scale_colour_manual(values = c("black", "red"))
+T2D_v_DN %>%
+  summarise(n = dplyr::n(),
+            .by = Significant)
+
+
+#GLMTreat
+T2D_v_DN_treat <- glmTreat(fit, contrast = contrastMatrix[, "T2D_v_DN"], lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+T2D_v_DN_treat%>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  geom_point(aes(colour = Significant)) +
+  scale_colour_manual(values = c("black", "red"))
+    
+T2D_v_DN_treat%>%
+  summarise(n = dplyr::n(),
+            .by = Significant)
+
+
+```
