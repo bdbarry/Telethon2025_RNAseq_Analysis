@@ -71,40 +71,37 @@ library(plyranges)
 GencodeV34 <- import.gff("/Users/benbarry/Documents/Telethon2025/data/raw/gencode.v34.chr_patch_hapl_scaff.annotation.gtf")
 
 gene_lengths <- GencodeV34 %>% 
-  subset(type == "exon") %>% 
-  split(.$gene_id) %>% 
-  reduce() %>% 
-  width() %>% 
-  map_int(sum)
-
-genes_tbl <- GencodeV34 %>% 
-  subset(type == "gene") %>% 
-  as_tibble() %>% 
-  dplyr::select(range, starts_with("gene"), -gene_status) %>% 
-  mutate(gene_length = gene_lengths[gene_id])
+  subset(type == "exon") %>%   # keep only exons
+  split(.$gene_id) %>%        # similar to "group_by" in tidyverse
+  reduce() %>%                # merges exon ranges that fall within others. eg. 2:5 and 1:7 becomes 1:7
+  width() %>%                 # calculate the length of the each of ranges
+  map_int(sum)                # calculates the total exon length
 
 
-rowRanges(se) <- GencodeV34 %>% 
-  subset(type == "gene") %>% 
-  select(starts_with("gene")) %>% 
-  mutate(gene_length = gene_lengths[gene_id]) %>% 
-  setNames(nm = mcols(.)$gene_id) %>% 
-  .[rownames(se)]
 
-setdiff(rownames(se), GencodeV34$gene_id)
-setdiff(str_extract(rownames(se), "ENSG[0-9]+"), str_extract(GencodeV34$gene_id, "ENSG[0-9]+"))
+
+# setdiff(rownames(se), GencodeV34$gene_id)
+# setdiff(str_extract(rownames(se), "ENSG[0-9]+"), str_extract(GencodeV34$gene_id, "ENSG[0-9]+"))
 ```
 
 ```{r summarisedExperimentObject}
-se <- SummarizedExperiment(
-  assays = list(counts = count_matrix[keep,]), # create a summarisedExperiment object
-  colData = GSE154881_metaData
+se <- SummarizedExperiment(                    # create a summarisedExperiment object
+  assays = list(counts = count_matrix[keep,]), # add the countmatrix as an assay
+  colData = GSE154881_metaData                 # add the metadata
 )
+
+# add gene annotations to SE object
+rowRanges(se) <- GencodeV34 %>% 
+  subset(type == "gene") %>%                      #keep only genes
+  select(starts_with("gene")) %>%                 #keep only the columns which starts with "gene"
+  mutate(gene_length = gene_lengths[gene_id]) %>% #create a new columns called gene_length using the vector from gene_lengths
+  setNames(nm = mcols(.)$gene_id) %>%             #set name using the column names from gene_id in gencodeV34 
+  .[rownames(se)]                                 #reorder the GencodeV34 to match rownames in se
 
 #add a logCPM column to the assay
 assay(se, "logCPM") <- cpm(se, log = TRUE)
 
-# create a columns within rowData of se called detected where all values must bre greater than 1 and the row sum must be greater than or equal to 5
+# create a columns within rowData of se called detected where all values must be greater than 1 and the row sum must be greater than or equal to 5
 rowData(se)$detected <- se %>% 
   cpm() %>% 
   is_greater_than(1) %>% 
@@ -127,19 +124,15 @@ se %>%
 
 se %>%
   subset(detected) %>%
-  plotAssayPCA(assay = "logCPM",
-               colour =  "disease_state",
-               pc_x = 1,
-               pc_y = 2)
+  plotAssayPCA(
+    assay = "logCPM", 
+    colour =  "disease_state", label = "sample",
+    pc_x = 1, pc_y = 2
+  )
 
 # based on density plot and RLE plot it seems like there are two Healthy Donors with poor quality samples
 
 ```
-
-
-
-#TMM normalisation - calcNormFactors
-# plot PCA + RLE 
 
 
 ```{r quick_subset_of_detected}
@@ -159,54 +152,8 @@ se_detected %>%
 
 ```
 
-``` {r }
-# creating a summarized experiment for detected data set
-
-detectedCountMatrix <-se@assays@data@listData[["counts"]]
-
-detectedCountMatrixMetaData <- tibble(
-  sampleName = colnames(detectedCountMatrix)
-) %>% 
-  mutate(
-    disease_state = case_when(
-      #make treatment "healthy_volunteer" if contains hv
-      grepl("HV", sampleName) ~ "healthy_volunteer", 
-      #make treatment "Diabetic_nephropathy" if contains dn
-      grepl("DN", sampleName) ~ "Diabetic_nephropathy", 
-      #make treatment "type2_diabetes" if contains dn
-      grepl("T2D", sampleName) ~ "type2_diabetes" 
-    ) %>%  
-      factor(levels = c("healthy_volunteer", "type2_diabetes", "Diabetic_nephropathy"))
-  )  
-
-DetectedSE <- SummarizedExperiment(
-  assays = list(counts = detectedCountMatrix), # create a summarisedExperiment object
-  colData = detectedCountMatrixMetaData 
-)
-
-#normalise By creating a DGEList and using calc norm factors
-assay(DetectedSE, "TmmNormCPM") <- DGEList(counts = detectedCountMatrix) %>%
-  calcNormFactors(method = "TMM") %>%
-  cpm(log = TRUE)
-
-DetectedSE %>% 
-  plotAssayRle(assay = "TmmNormCPM", fill = "disease_state")
-
-DetectedSE %>% 
-  plotAssayRle(assay = "TmmNormCPM", fill = "disease_state", by_x = "disease_state")
-
-DetectedSE %>% 
-  plotAssayPCA(assay = "TmmNormCPM",
-               colour =  "disease_state",
-               label = "sampleName",
-               pc_x = 1,
-               pc_y = 2)
-
-#Following TMM nomrmalisation there is still large varience in the data hence HV3 and HV4 samples will be removed.  
-```
 
 ```{r} 
-# option 1:
 #remove Problematic samples.
 SE_outlier_removed <- se_detected[, !se_detected$sampleName %in% c("HV_3", "HV_4")]
 
@@ -240,5 +187,8 @@ A + B +
 write_rds(SE_outlier_removed, "/Users/benbarry/Documents/Telethon2025/data/processed/SE_outlier_removed.rds", compress = "gz")
 
 ```
+
+
+
 
 

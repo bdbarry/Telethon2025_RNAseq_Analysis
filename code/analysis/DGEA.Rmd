@@ -9,19 +9,25 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
 ```{r check-install}
+#create a vector of required packages and compare with installed packages for efficient installation 
+
 pkg <- c("SummarizedExperiment", "extraChIPs", "edgeR", "tidyverse")
 not_inst <- setdiff(pkg, rownames(installed.packages()))
+
+
+# if there are packages required which arent installed, install them. 
+
 if (length(not_inst)) BiocManager::install(not_inst)
 ```
 
 
 ```{r load-libraries}
 library(tidyverse)
-library(extraChIPs)
+library(SummarizedExperiment)
 library(edgeR)
 library(magrittr)
 library(patchwork)
-library(limma)
+library(extraChIPs)
 ```
 
 
@@ -31,24 +37,37 @@ SE_outlier_removed <- read_rds("/Users/benbarry/Documents/Telethon2025/data/proc
 ```
 
 ```{r DesignMatrix}
+
 # creating the design matrix for analysis
+# this design matrix uses the first column as the intercept term (in this case healthy controls)
+
 model <- model.matrix(~ disease_state, data = colData(SE_outlier_removed))
+
 model
 
 #creating a contrast matrix 
+#because the intercept term is defined we are "comparing" with that
+
 contrastMatrix <- makeContrasts(
   T2D_v_DN = disease_statetype2_diabetes - disease_stateDiabetic_nephropathy,  
   Hv_v_T2D = disease_statetype2_diabetes,
   Hv_v_DN = disease_stateDiabetic_nephropathy,
-             levels = model)
+  levels = model)
+
 contrastMatrix
 
+# plot the biological coefficient of variance.
+
 SE_outlier_removed %>%
+  calcNormFactors(method = "TMM") %>%
   estimateDisp(design = model) %>%
   plotBCV()
 
-#create a GLM QL fit - this is the recomended approach now. 
+#create a GLM QL fit - this is the recommended approach now. 
+#note: important to specify normalization method here.
+
 fit <- SE_outlier_removed %>%
+  calcNormFactors(method = "TMM") %>%
   estimateDisp(design = model) %>%
   glmQLFit(model)
 
@@ -56,15 +75,24 @@ fit <- SE_outlier_removed %>%
 ```
 
 ```{r QLFTests Hv-vs-T2D}
+
+# GLM-QL test for DE comparing Healthy vs Diabetes. 
+
 Hv_v_T2D <- glmQLFTest(fit, contrast = contrastMatrix[, "Hv_v_T2D"]) %>%
   topTags(n = Inf) %>%
-  pluck("table") %>%
+  pluck("table") %>%      #pluck() pulls "table" out of the topTags obj
   as_tibble() %>%
   mutate(Significant = PValue < 0.05)
 
+# return the number of significant and NS genes.
+
 Hv_v_T2D %>%
-  summarise(n = dplyr::n(),
-            .by = Significant)
+  summarise(
+    n = dplyr::n(),
+    .by = Significant)
+
+
+# plot an MA plot (logCPM vs logFC) coloured by significance. 
 
 Hv_v_T2D %>%
   ggplot(aes(
@@ -76,12 +104,17 @@ Hv_v_T2D %>%
     
 
 
-# using glmTreat
-Hv_v_T2D_treat <- glmTreat(fit, contrast = contrastMatrix[, "Hv_v_T2D"],  lfc = log2(1.2)) %>%
+# GLMTREAT test for DE comparing Healthy vs Diabetes. 
+
+Hv_v_T2D_treat <- glmTreat(
+  fit, contrast = contrastMatrix[, "Hv_v_T2D"],  lfc = log2(1.2)) %>%
   topTags(n = Inf) %>%
   pluck("table") %>%
   as_tibble() %>%
   mutate(Significant = PValue < 0.05)
+
+
+# plot an MA plot (logCPM vs logFC) coloured by significance. 
 
 Hv_v_T2D_treat %>%
   ggplot(aes(
@@ -89,8 +122,12 @@ Hv_v_T2D_treat %>%
     y = logFC
   )) + 
   geom_point(aes(colour = Significant)) +
+  geom_smooth(method = 'lm', se = FALSE) +
   scale_colour_manual(values = c("black", "red"))
-    
+
+
+# return the number of significant and NS genes.  
+
 Hv_v_T2D_treat %>%
   summarise(n = dplyr::n(),
             .by = Significant)
@@ -100,12 +137,17 @@ Hv_v_T2D_treat %>%
 ```
 
 ```{r HV-vs-DN}
-#GLMQLFTest
+
+# GLM-QL test for DE comparing Healthy vs Diabetic Nepropathy
+
 Hv_v_DN <- glmQLFTest(fit, contrast = contrastMatrix[, "Hv_v_DN"]) %>%
 topTags(n = Inf) %>%
   pluck("table") %>%
   as_tibble() %>%
   mutate(Significant = PValue < 0.05)
+
+
+# plot an MA plot (logCPM vs logFC) coloured by significance. 
 
 Hv_v_DN %>%
   ggplot(aes(
@@ -114,19 +156,26 @@ Hv_v_DN %>%
   )) + 
   geom_point(aes(colour = Significant)) +
   scale_colour_manual(values = c("black", "red"))
-    
+
+
+# return the number of significant and NS genes.    
+
 Hv_v_DN %>%
   summarise(n = dplyr::n(),
             .by = Significant)
 
 
 
-#GLMTreat
+#GLMTreat test for DE comparing Healthy vs Diabetic Nepropathy
+
 Hv_v_DN_treat <- glmTreat(fit, contrast = contrastMatrix[, "Hv_v_DN"],  lfc = log2(1.5)) %>%
 topTags(n = Inf) %>%
   pluck("table") %>%
   as_tibble() %>%
   mutate(Significant = PValue < 0.05)
+
+
+# plot an MA plot (logCPM vs logFC) coloured by significance.
 
 Hv_v_DN_treat%>%
   ggplot(aes(
@@ -134,8 +183,12 @@ Hv_v_DN_treat%>%
     y = logFC
   )) + 
   geom_point(aes(colour = Significant)) +
+  geom_smooth(method = 'lm', se = FALSE) +
   scale_colour_manual(values = c("black", "red"))
-    
+ 
+
+# return the number of significant and NS genes.    
+
 Hv_v_DN_treat%>%
   summarise(n = dplyr::n(),
             .by = Significant)
@@ -144,13 +197,17 @@ Hv_v_DN_treat%>%
 ```
 
 ```{r T2D-vs-DN}
-#GLMQLFTest
+#GLM-QL test for DE comparing Diabetes with Diabetic Neropathy
+
 T2D_v_DN <- glmQLFTest(fit, contrast = contrastMatrix[, "T2D_v_DN"]) %>%
 topTags(n = Inf) %>%
   pluck("table") %>%
   as_tibble() %>%
   mutate(Significant = PValue < 0.05)
 
+
+# plot an MA plot (logCPM vs logFC) coloured by significance. 
+
 T2D_v_DN %>%
   ggplot(aes(
     x = logCPM,
@@ -158,29 +215,186 @@ T2D_v_DN %>%
   )) + 
   geom_point(aes(colour = Significant)) +
   scale_colour_manual(values = c("black", "red"))
+
+
+# return the number of significant and NS genes.  
+
 T2D_v_DN %>%
   summarise(n = dplyr::n(),
             .by = Significant)
 
 
-#GLMTreat
+
+#GLMTreat for DE comparing Diabetes with Diabetic Neropathy
+
 T2D_v_DN_treat <- glmTreat(fit, contrast = contrastMatrix[, "T2D_v_DN"], lfc = log2(1.5)) %>%
 topTags(n = Inf) %>%
   pluck("table") %>%
   as_tibble() %>%
   mutate(Significant = PValue < 0.05)
 
+
+# plot an MA plot (logCPM vs logFC) coloured by significance. 
+
 T2D_v_DN_treat%>%
   ggplot(aes(
     x = logCPM,
     y = logFC
   )) + 
   geom_point(aes(colour = Significant)) +
+  geom_smooth(method = 'lm', se = FALSE) +
   scale_colour_manual(values = c("black", "red"))
-    
+
+
+# return the number of significant and NS genes. 
+
 T2D_v_DN_treat%>%
   summarise(n = dplyr::n(),
             .by = Significant)
 
 
 ```
+# RUVg normalisation.
+
+"If no genes are known a priori not to be influenced by the covariates of interest, one can obtain a set of “in-silico empirical” negative controls, e.g., least significantly DE genes based on a first-pass DE analysis performed prior to RUVg normalization."
+
+the TMM normalization above is okay, however there is still some variance indicated by the slope of the lm. 
+here we are trying RUVg. 
+
+
+```{r ruvg-nomralisation}
+library(RUVSeq)
+#step 1: run a normal DGE 
+  #1.1: same model design as before.
+
+model <- model.matrix(~ disease_state, data = colData(SE_outlier_removed))
+model
+
+
+# 1.2: same fit as before using TMM for normlaisation
+
+fit <- SE_outlier_removed %>%
+  calcNormFactors(method = "TMM") %>%
+  estimateDisp(design = model) %>%
+  glmQLFit(model)
+
+
+# 1.3: perform GLMQLF test.
+  # note: here we have no contrasts and are instead performing and ANOVA-like test
+
+QLFTest <- glmQLFTest(fit, coef = 2:3)
+QLFTest
+
+
+# step 2: return the differential expressed genes.
+
+QLFtop <- QLFTest %>%
+  topTags(n = Inf) %>%
+  pluck("table") %>%
+  dplyr::select(
+    starts_with("gene"),
+    logCPM,
+    'F',
+    PValue,
+    FDR)
+
+
+#step 3: create a set of 5000 of genes with the highest PValue (ie. not changing). 
+  # note: this is somewhat arbitrary
+
+emperical <- QLFtop %>%
+  dplyr::arrange(desc(PValue)) %>%
+  .[1:5000,] %>%
+  .$gene_id
+
+
+# step 4: run RUVg (where estimated factor of unwanted variation (k) = 1)
+
+ruvg <- RUVg(assay(SE_outlier_removed, "counts"), emperical, k = 1) 
+ruvg$W
+
+# due to compatibility issues  - convert to a DGElist object 
+ruv_dge <- DGEList(
+  counts = ruvg$normalizedCounts,
+  samples = cbind(colData(SE_outlier_removed), ruvg$W),
+  genes = rowRanges(SE_outlier_removed))
+
+
+
+```
+
+```{r RUVG_fit_and_model}
+
+# create a new design model including the estimated variation.
+
+RUVg_model <- model.matrix(~ disease_state + W_1, data = ruv_dge$samples)
+
+
+# create a new fit
+  # note: We still use TMM normalisation here 
+
+RUVg_fit <- ruv_dge %>%
+  calcNormFactors(method = "TMM") %>%
+  estimateDisp(RUVg_model) %>%
+  glmQLFit(RUVg_model)
+
+# create a new contrast matrix with the levels from model. 
+
+RUVg_contrasts <- makeContrasts(
+  T2D_v_DN = disease_statetype2_diabetes - disease_stateDiabetic_nephropathy,  
+  Hv_v_T2D = disease_statetype2_diabetes,
+  Hv_v_DN = disease_stateDiabetic_nephropathy,
+  levels = RUVg_model)
+
+
+# add RUVg normalized counts to se object as an assay for ease of visualization
+assay(SE_outlier_removed, "RUVGnorm") <- ruv_dge %>%
+  cpm(log=TRUE)
+
+# use extraChIPs to plot data 
+plotAssayRle(SE_outlier_removed, "RUVGnorm", fill = "disease_state")
+
+plotAssayPCA(
+  SE_outlier_removed, "RUVGnorm",
+  colour =  "disease_state",
+  label = "sampleName")
+```
+
+Based on the RLE and PCA plots fro ruvg normalization its unlikely that RUVG is necessary.  
+
+none-the-less here  we have a quick look at healthy vs T2D. 
+
+```{r ruvg_normalised_genes}
+RUV_T2D_V_DN <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "T2D_v_DN"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05) 
+  
+
+RUV_Hv_V_DN <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "Hv_v_DN"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05)
+
+RUV_Hv_V_T2D <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "Hv_v_T2D"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05) 
+
+
+
+```
+
+
+the next set of analysis will take place using new markdown where DGE results are imported. 
+
+```{r saving_data}
+write_tsv(RUV_T2D_V_DN, "/Users/benbarry/Documents/Telethon2025/data/processed/RUV_T2D_V_DN.tsv")
+write_tsv(RUV_Hv_V_DN, "/Users/benbarry/Documents/Telethon2025/data/processed/RUV_Hv_V_DN.tsv")
+write_tsv(RUV_Hv_V_T2D, "/Users/benbarry/Documents/Telethon2025/data/processed/RUV_Hv_V_T2D.tsv")
+```
+
+

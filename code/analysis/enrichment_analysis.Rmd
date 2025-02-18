@@ -1,0 +1,76 @@
+---
+title: "Enrichment_analysis"
+author: "Ben Barry"
+date: "2025-02-18"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r check-install}
+#create a vector of required packages and compare with installed packages for efficient installation 
+
+pkg <- c("SummarizedExperiment", "extraChIPs", "edgeR", "tidyverse", "GOseq")
+not_inst <- setdiff(pkg, rownames(installed.packages()))
+
+
+# if there are packages required which arent installed, install them. 
+
+if (length(not_inst)) BiocManager::install(not_inst)
+```
+
+```{r load-packages}
+library(tidyverse)
+library(edgeR)
+library(goseq)
+library(here)
+```
+
+```{r load-data}
+RUV_Hv_V_DN <- read_tsv(here("data/processed", "RUV_Hv_V_DN.tsv"))
+
+RUV_Hv_V_T2D <- read_tsv(here("data/processed", "RUV_Hv_V_T2D.tsv"))
+
+RUV_T2D_V_DN <- read_tsv(here("data/processed", "RUV_T2D_V_DN.tsv"))
+```
+
+
+
+```{r}
+RUV_Hv_V_DN <- RUV_Hv_V_DN %>%
+  mutate(direction = case_when(
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == FALSE ~ "NotSig")
+    )
+
+RUV_Hv_V_T2D <- RUV_Hv_V_T2D %>%
+  mutate(direction = case_when(
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == FALSE ~ "NotSig")
+    )
+
+RUV_T2D_V_DN <- RUV_T2D_V_DN %>%
+  mutate(direction = case_when(
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == FALSE ~ "NotSig")
+    )
+
+```
+
+```{r GOseq}
+genes <- RUV_Hv_V_DN %>%
+  mutate(Significant = setNames(Significant, gene_id)) %>%
+  pluck("Significant")
+
+gene_lengths <- as.vector(RUV_Hv_V_DN$gene_length)
+
+pwf <- nullp(genes, bias.data = gene_lengths)
+
+
+goseq(pwf, test.cats=c("GO:CC", "GO:BP", "GO:MF"), 
+	method = "Wallenius", repcnt = 2000, use_genes_without_cat=FALSE)
+```
