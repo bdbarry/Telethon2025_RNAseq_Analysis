@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```{r check-install}
 #create a vector of required packages and compare with installed packages for efficient installation 
 
-pkg <- c("SummarizedExperiment", "extraChIPs", "edgeR", "tidyverse", "GOseq")
+pkg <- c("SummarizedExperiment", "extraChIPs", "edgeR", "tidyverse", "GOseq", "sSNAPPY")
 not_inst <- setdiff(pkg, rownames(installed.packages()))
 
 
@@ -25,6 +25,10 @@ library(tidyverse)
 library(edgeR)
 library(goseq)
 library(here)
+library(msigdbr)
+library(SummarizedExperiment)
+library(Matrix)
+
 ```
 
 ```{r load-data}
@@ -62,15 +66,250 @@ RUV_T2D_V_DN <- RUV_T2D_V_DN %>%
 ```
 
 ```{r GOseq}
-genes <- RUV_Hv_V_DN %>%
+genes <- RUV_Hv_V_T2D %>%
   mutate(Significant = setNames(Significant, gene_id)) %>%
-  pluck("Significant")
+  pluck("Significant") %>%
+  setNames(str_remove(names(.), "\\.[0-9]+$"))
 
-gene_lengths <- as.vector(RUV_Hv_V_DN$gene_length)
+gene_lengths <- as.vector(RUV_Hv_V_T2D$gene_length)
 
-pwf <- nullp(genes, bias.data = gene_lengths)
+pwf <- nullp(genes, bias.data = log10(gene_lengths))
 
 
-goseq(pwf, test.cats=c("GO:CC", "GO:BP", "GO:MF"), 
-	method = "Wallenius", repcnt = 2000, use_genes_without_cat=FALSE)
+
+
+```
+
+
+
+```{r msigdbr}
+msigdbr_collections()
+
+msigdbr_df <- msigdbr(species = "Homo sapiens") %>%
+  dplyr::filter(
+      gs_cat == "H" | gs_subcat %in% c("CP:KEGG", "CP:REACTOME", "GO:BP, GO:MF") #, "IMMUNESIGDB"
+  ) %>%
+  dplyr::filter(ensembl_gene %in% str_remove(RUV_Hv_V_T2D$gene_id, "\\.[0-9]+$")) %>%
+  dplyr::filter(n() >= 5, .by = gs_name)
+
+head(msigdbr_df)
+glimpse(msigdbr_df)
+
+msigdbr_df %>%
+  distinct(gs_name, .keep_all = TRUE) %>%
+  summarise(n = n(), .by = ends_with("cat"))
+
+gs_by_gene_id <- msigdbr_df %>% 
+  split(.$ensembl_gene) %>% 
+  lapply(pull, "gs_name")
+
+
+goseq_df <- goseq(pwf, genome = "hg38", gene2cat = gs_by_gene_id)  %>% 
+  as_tibble() %>% 
+  dplyr::select(-starts_with("under")) %>% 
+  mutate(adj_p = p.adjust(over_represented_pvalue, "bonferroni"))
+
+goseq_df %>%
+  filter(adj_p < 0.05)
+
+
+RUV_Hv_V_T2D %>%
+  mutate(ensemble_id = str_remove(gene_id, "\\.[0-9]+$")) %>%
+  dplyr::filter(ensemble_id %in% (msigdbr_df %>% dplyr::filter(
+  gs_name == "REACTOME_NOTCH4_INTRACELLULAR_DOMAIN_REGULATES_TRANSCRIPTION") %>%
+  pull(ensembl_gene))) %>%
+  dplyr::filter(Significant)
+
+```
+
+
+```{r GSEA}
+library(clusterProfiler)
+
+geneRanks <- RUV_Hv_V_T2D%>%
+  mutate(
+    ensemble_id = str_remove(gene_id, "\\.[0-9]+$"),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %>%
+  arrange(desc(signed)) %>% 
+  pluck("signed")
+
+  # arrange(desc(logFC)) %>%
+  #deframe()
+# write_tsv(GSEAlist, "/Users/benbarry/Documents/Telethon2025/data/processed/RUV_Hv_V_T2D_GSEAlist.tsv")
+
+
+GSEA(geneRanks,
+     TERM2GENE = (msigdbr_df %>%
+       dplyr::select(gs_name, ensembl_gene))) %>%
+  dotplot(showCategory = 11)
+
+```
+
+
+```{r setting up NetGSA}
+library(netgsa)
+library(graphite)
+library(data.table)
+library(sSNAPPY)
+
+SE_outlier_removed <- read_rds("/Users/benbarry/Documents/Telethon2025/data/processed/SE_outlier_removed.rds")
+
+
+
+
+# setting up the inputs
+library(AnnotationHub)
+ah <- AnnotationHub() 
+ensDb <- ah[["AH79689"]]
+
+ens2entrez <- ensDb %>%
+  genes() %>% 
+  mcols() %>% 
+  as.data.frame() %>% 
+  mutate(entrezid = setNames(entrezid, gene_id_version)) %>% 
+  pluck("entrezid") %>% 
+  .[vapply(., \(x) !all(is.na(x)), logical(1))] %>% 
+  lapply(\(x) x[1])
+
+
+mapping_df <- tibble(ens2entrez, ensembl_id = names(ens2entrez)) %>% 
+  unchop(ens2entrez)
+  
+topPValue <- RUV_Hv_V_T2D %>%
+  arrange(PValue) %>%
+  dplyr::slice(1:1000) %>%
+  pluck("gene_id") 
+
+netGSAmat <- assay(SE_outlier_removed, "RUVGnorm") %>%
+  as_tibble(rownames = "ensembl_id") %>%
+  dplyr::filter(ensembl_id %in% topPValue) %>%
+  left_join(mapping_df, by = "ensembl_id") %>%
+  dplyr::select(-"ensembl_id") %>%
+  distinct(ens2entrez, .keep_all = TRUE) %>%
+  na.omit() %>%
+  mutate(ens2entrez = paste0("ENTREZID:", ens2entrez, sep = "")) %>%
+  column_to_rownames("ens2entrez") %>%
+  dplyr::select(starts_with("T2D") | starts_with("HV")) %>%
+  as.matrix() %>%
+  .[!(rownames(.) %in% "ENTREZID:107984138"),] %>% 
+  .[rownames(.) %in% colnames(pathways_mat)]
+
+colnames(netGSAmat)
+
+
+
+group <- colData(SE_outlier_removed, "disease_state") %>%
+  table() %>%
+  t() %>%
+  apply(., MARGIN = 2, \(x) which(x == 1))
+group[6:13]
+
+
+paths <- graphite::pathways('hsapiens','kegg')
+head(nodes(paths[[1]]))
+
+```
+
+
+```{r Pathway Enrichment Analysis}
+edges <- obtainEdgeList(rownames(netGSAmat), c("reactome", "kegg"))
+
+AdjMat <- prepareAdjMat(netGSAmat, group[6:13], databases = edges)
+
+NetGsaREHE <- NetGSA(AdjMat[["Adj"]], netGSAmat, group[6:13], pathways = pathways_mat)
+#Error in pathways[, order, drop = FALSE] : subscript out of bounds
+```
+
+```{r debugging}
+
+
+A_mat <- AdjMat[["Adj"]] %>%
+  .[1:2] %>% 
+  lapply(function(a) {
+    a_full <- as.matrix(bdiag(a))
+    row_names <- do.call(c, lapply(a, rownames))
+    col_names <- do.call(c, lapply(a, colnames))
+    dimnames(a_full) <- list(row_names, col_names)
+  return(a_full)
+})
+    
+
+```
+
+
+```{r WGCNA}
+library(WGCNA)
+WGCNAmat <- assay(SE_outlier_removed, "RUVGnorm") %>%
+  t()
+
+WGCNAmat[1:13, 1:5]
+
+allowWGCNAThreads()          # allow multi-threading (optional)
+#> Allowing multi-threading with up to 4 threads.
+
+# Choose a set of soft-thresholding powers
+powers = c(c(1:10), seq(from = 12, to = 20, by = 2))
+
+# Call the network topology analysis function
+sft = pickSoftThreshold(
+  WGCNAmat,
+  powerVector = powers,
+  verbose = 5
+  )
+
+
+par(mfrow = c(1,2));
+cex1 = 0.9;
+
+plot(sft$fitIndices[, 1],
+     -sign(sft$fitIndices[, 3]) * sft$fitIndices[, 2],
+     xlab = "Soft Threshold (power)",
+     ylab = "Scale Free Topology Model Fit, signed R^2",
+     main = paste("Scale independence")
+)
+text(sft$fitIndices[, 1],
+     -sign(sft$fitIndices[, 3]) * sft$fitIndices[, 2],
+     labels = powers, cex = cex1, col = "red"
+)
+abline(h = 0.80, col = "red")
+
+wgcNetwork <- blockwiseModules(WGCNAmat,                # <= input here
+
+                          # == Adjacency Function ==
+                          power = 5,                # <= power here
+                          networkType = "signed",
+
+                          # == Tree and Block Options ==
+                          deepSplit = 2,
+                          pamRespectsDendro = F,
+                          # detectCutHeight = 0.75,
+                          minModuleSize = 30,
+                          maxBlockSize = 4000,
+
+                          # == Module Adjustments ==
+                          reassignThreshold = 0,
+                          mergeCutHeight = 0.25,
+
+                          # == TOM == Archive the run results in TOM file (saves time)
+                          saveTOMs = T,
+                          saveTOMFileBase = "ER",
+
+                          # == Output Options
+                          numericLabels = T,
+                          verbose = 3)
+
+
+# Convert labels to colors for plotting
+mergedColors = labels2colors(wgcNetwork$colors)
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(
+  wgcNetwork$dendrograms[[1]],
+  mergedColors[wgcNetwork$blockGenes[[1]]],
+  "Module colors",
+  dendroLabels = FALSE,
+  hang = 0.03,
+  addGuide = TRUE,
+  guideHang = 0.05 )
+
 ```
