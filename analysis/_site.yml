@@ -1,0 +1,37 @@
+name: 'Analysis of Type 2 diebetic, Diabetic nerphopathy and Healthy blood'
+output_dir: ../docs
+navbar:
+  title: "test title"
+  left:
+  - icon: fa-home
+    text: Home
+    href: index.html
+  - text: Raw data QC
+    menu:
+    - text: "test QC"
+      href: attempt1.html
+  - text: "Differential expression"
+    menu:
+    - text: "Healthy vs diabetes"
+      href: HVvsT2D.html
+    - text: "Healthy vs Diabetic nephropathy"
+      href: HVvsDN.html
+    - text: "Diabetic nephropathy vs diabetes"
+      href: DNvsT2D.html
+  - text: "enrichment analysis"
+    menu:
+    - text: "method 1"
+      href: method1.html
+    - text: "method 2"
+      href: method2.html
+  right:
+  - icon: fa-github
+    href: https://github.com/bdbarry/Telethon2025_RNAseq_Analysis
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    code_folding: hide
+    self_contained: no
+    theme: sandstone
+    highlight: textmate

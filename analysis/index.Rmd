@@ -1,0 +1,28 @@
+---
+title: "Home"
+date: "`r format(Sys.Date(), '%d %B, %Y')`"
+bibliography: references.bib
+link-citations: true
+---
+
+## Bulk RNAseq analysis of an asian diabetes cohort
+
+The analysis presented here has explored the transcriptome of whole blood in presented by "ref" [which has not been added yet]. These data contain the transcriptomic information from RNA isolated from whole blood in patentients with type 2 diabetes, diabetic nephropathy and healthy controls. 
+
+
+We'll use `egdeR` [@edger2010]
+
+## References
+
+<div id="refs"></div>
+
+<br>
+<button type="button" class="btn btn-default btn-sessioninfo" data-toggle="collapse" data-target="#sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span> Session information
+</button>
+</p>
+<div id="sessioninfo" class="collapse">
+```{r session-info, echo=FALSE}
+pander::pander(sessionInfo())
+```
+</div>
