@@ -350,6 +350,7 @@ RUVg_contrasts <- makeContrasts(
 # add RUVg normalized counts to se object as an assay for ease of visualization
 assay(SE_outlier_removed, "RUVGnorm") <- ruv_dge %>%
   cpm(log=TRUE)
+write_rds(SE_outlier_removed, "/Users/benbarry/Documents/Telethon2025/data/processed/SE_outlier_removed.rds", compress = "gz")
 
 # use extraChIPs to plot data 
 plotAssayRle(SE_outlier_removed, "RUVGnorm", fill = "disease_state")
