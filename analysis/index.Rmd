@@ -5,13 +5,13 @@ bibliography: references.bib
 link-citations: true
 ---
 
-## Bulk RNAseq analysis of an asian diabetes cohort
+## Bulk RNAseq analysis of an asian diabetes cohort (GSE154881)
 
-The analysis presented here has explored the transcriptome of whole blood in presented by "ref" [which has not been added yet]. These data contain the transcriptomic information from RNA isolated from whole blood in patentients with type 2 diabetes, diabetic nephropathy and healthy controls. 
+The analysis presented here has explored the transcriptome of whole blood Found at GSE154881 (This has not been published). These data contain the transcriptomic information from RNA isolated from whole blood in patients with type 2 diabetes, diabetic nephropathy and healthy controls. 
 
 
-This analysis will use the `egdeR` [@edger2010] work flow. We utilized two different methods of normalization "TMM" from `edgeR` and RUVg from `RUVSeq`. 
-Enrichment analysis was then performed using GOseq (over representation analysis) and gene set enrichment analysis. 
+This analysis will use the `egdeR` [@edger2010] work flow. We utilized two different methods of normalization "TMM" from `edgeR` and RUVg from `RUVSeq`[@RUVSeq2014]. 
+Enrichment analysis was then performed using `GOseq` (over representation analysis) [@edger2010] and gene set enrichment analysi using `GSEA()` from `clusterProfiler` [@clusterProfiler2024]. 
 
 ## References
 

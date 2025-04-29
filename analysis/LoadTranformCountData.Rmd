@@ -6,7 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = FALSE, 
+  fig.width = 10, fig.height = 8
+  )
 ```
 
 
@@ -39,7 +42,7 @@ head(count_matrix[keep,])
 
 ```
 
-Following download of data, an initial parameter was set to only keep transcripts whose counts were greater than 0. A count matrix with `r ncol(count_matrix)` samples and `r nrow(count_matrix)` was saved locally.
+Following download of data, an initial parameter was set to only keep transcripts whose counts were greater than 0. A count matrix with `r ncol(count_matrix)` samples and `r nrow(count_matrix)` alignments was saved locally.
 
 ### metadata
 Meta data was also extracted and saved locally
@@ -111,6 +114,7 @@ rowData(se)$detected <- se %>%
 
 glimpse(se)
 ```
+
 ### Log CPM plots
 Log CPM was then plotted using 'ExtrChIps' to observe variation between donors and disease states.
 First we utilized `plotAssayDensities` to visualize the kernel density estimates - in essence this provides a smoothed histogram. Here we would expect each sample to exhibit a similar distribution of read counts.
@@ -130,7 +134,7 @@ se %>%
 From this density plot it appears that there are two samples from the "healthy_volunteer" cohort which appear to have a negatively skewed LogCPM, i.e. a high frequency of low counts. To further interrogate this we next plotted the relative log expression (RLE). This performs a Log1p transformation of the data and presents the results as a boxplot, allowing for visualization of variance. 
 
 
-```{r RlePlot}
+```{r RlePlot, fig.width= 10}
 
 se %>% 
   subset(detected) %>% 

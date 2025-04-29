@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Ben Barry" />
+
+<meta name="date" content="2025-04-29" />
+
+<title>GSEA</title>
+
+<script src="site_libs/header-attrs-2.29/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/sandstone.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/core-js-2.5.3/shim.min.js"></script>
+<script src="site_libs/react-18.2.0/react.min.js"></script>
+<script src="site_libs/react-18.2.0/react-dom.min.js"></script>
+<script src="site_libs/reactwidget-2.0.0/react-tools.js"></script>
+<link href="site_libs/htmltools-fill-0.5.8.1/fill.css" rel="stylesheet" />
+<script src="site_libs/htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<link href="site_libs/reactable-0.4.4/reactable.css" rel="stylesheet" />
+<script src="site_libs/reactable-binding-0.4.4/reactable.js"></script>
+<link href="site_libs/font-awesome-6.5.2/css/all.min.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">test title</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">
+    <span class="fa fa-home"></span>
+     
+    Home
+  </a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Raw data QC
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="LoadTranformCountData.html">Intial load and data transformation</a>
+    </li>
+    <li>
+      <a href="LowCountSampleRemoval.html">removal of low quality samples</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Differential Gene Expression Analysis (DGEA)
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="TmmDGEA.html">Tmm Normalised Data</a>
+    </li>
+    <li>
+      <a href="RUVgNorm.html">RUVg Normalised Data</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    enrichment analysis
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="GOseq.html">Goseq</a>
+    </li>
+    <li>
+      <a href="GSEA.html">GSEA</a>
+    </li>
+  </ul>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        <li>
+  <a href="https://github.com/bdbarry/Telethon2025_RNAseq_Analysis">
+    <span class="fa fa-github"></span>
+     
+  </a>
+</li>
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">GSEA</h1>
+<h4 class="author">Ben Barry</h4>
+<h4 class="date">2025-04-29</h4>
+
+</div>
+
+
+<pre class="r"><code>library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(here)
+library(clusterProfiler)
+library(purrr)
+library(reactable)
+library(readr)
+library(msigdbr)
+library(reactable)
+library(htmltools)</code></pre>
+<pre class="r"><code>RUV_Hv_V_DN &lt;- read_tsv(here(&quot;data/processed&quot;, &quot;RUV_Hv_V_DN.tsv&quot;))
+
+RUV_Hv_V_T2D &lt;- read_tsv(here(&quot;data/processed&quot;, &quot;RUV_Hv_V_T2D.tsv&quot;))
+
+RUV_T2D_V_DN &lt;- read_tsv(here(&quot;data/processed&quot;, &quot;RUV_T2D_V_DN.tsv&quot;))</code></pre>
+<div id="gene-set-enrichment-analysis-gsea" class="section level2">
+<h2>Gene Set Enrichment Analysis (GSEA)</h2>
+<p>Similar to ORA, GSEA determines whether predefined sets of genes
+(e.g., pathways or functional categories) show statistically
+significant, coordinated differences between two samples. Unlike ORA
+which uses a user-defined list (eg. significantly DE), GSEA analyzes the
+entire ranked list of genes to detect subtle but consistent expression
+changes across a gene set. For this analysis we will use the same MSIGBD
+collections</p>
+<pre class="r"><code>msigdbr_df &lt;- msigdbr(species = &quot;Homo sapiens&quot;) %&gt;%
+  dplyr::filter(
+      gs_cat == &quot;H&quot; | gs_subcat %in% c(&quot;CP:KEGG&quot;, &quot;CP:REACTOME&quot;, &quot;GO:BP, GO:MF&quot;) #, &quot;IMMUNESIGDB&quot;
+  )</code></pre>
+</div>
+<div id="healthy-control-vs.-type-2-diabetes." class="section level2">
+<h2>Healthy control Vs. Type 2 diabetes.</h2>
+<pre class="r"><code>geneRanks &lt;- RUV_Hv_V_T2D %&gt;%
+  mutate(
+    ensemble_id = str_remove(gene_id, &quot;\\.[0-9]+$&quot;),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %&gt;%
+  arrange(desc(signed)) %&gt;% 
+  pluck(&quot;signed&quot;)
+
+terms &lt;- msigdbr_df %&gt;%
+  dplyr::select(gs_name, ensembl_gene)
+
+x &lt;- GSEA(geneRanks,
+     TERM2GENE = terms,
+     pAdjustMethod = &quot;bonferroni&quot;
+     )
+
+
+cp &lt;- htmltools::tags$caption(
+  &quot;Healthy control Vs. Type 2 diabetes.&quot;
+)
+
+tbl_ID &lt;- &quot;GSEA-Hv-V-T2D&quot;
+
+GSEA_tbl &lt;- x %&gt;%
+  pluck(&quot;result&quot;) %&gt;%
+  dplyr::select(enrichmentScore, NES, p.adjust) %&gt;%
+  reactable(
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa(&quot;download&quot;), &quot;Download as CSV&quot;),
+      onclick = glue::glue(&quot;Reactable.downloadDataCSV(&#39;{tbl_ID}&#39;, &#39;{tbl_ID}.csv&#39;)&quot;)
+    ),
+    tags$br(), cp,
+    GSEA_tbl
+  )
+)</code></pre>
+<button onclick="Reactable.downloadDataCSV(&#39;GSEA-Hv-V-T2D&#39;, &#39;GSEA-Hv-V-T2D.csv&#39;)">
+<svg aria-hidden="true" role="img" viewBox="0 0 512 512" style="height:1em;width:1em;vertical-align:-0.125em;margin-left:auto;margin-right:auto;font-size:inherit;fill:currentColor;overflow:visible;position:relative;"><path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V274.7l-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7V32zM64 352c-35.3 0-64 28.7-64 64v32c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V416c0-35.3-28.7-64-64-64H346.5l-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352H64zm368 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg>
+Download as CSV
+</button>
+<br/>
+<caption>Healthy control Vs. Type 2 diabetes.</caption>
+<div class="reactable html-widget html-fill-item" id="GSEA-Hv-V-T2D" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="GSEA-Hv-V-T2D">{"x":{"tag":{"name":"Reactable","attribs":{"data":{".rownames":["REACTOME_EUKARYOTIC_TRANSLATION_INITIATION","REACTOME_RESPONSE_OF_EIF2AK4_GCN2_TO_AMINO_ACID_DEFICIENCY","REACTOME_EUKARYOTIC_TRANSLATION_ELONGATION","KEGG_RIBOSOME","HALLMARK_TNFA_SIGNALING_VIA_NFKB","KEGG_SPLICEOSOME","HALLMARK_MYC_TARGETS_V1","REACTOME_RRNA_PROCESSING","REACTOME_NONSENSE_MEDIATED_DECAY_NMD","REACTOME_SRP_DEPENDENT_COTRANSLATIONAL_PROTEIN_TARGETING_TO_MEMBRANE","REACTOME_TRANSLATION","REACTOME_REGULATION_OF_EXPRESSION_OF_SLITS_AND_ROBOS","REACTOME_SELENOAMINO_ACID_METABOLISM","REACTOME_MRNA_SPLICING","REACTOME_PROCESSING_OF_CAPPED_INTRON_CONTAINING_PRE_MRNA","REACTOME_INFLUENZA_INFECTION","REACTOME_NEUTROPHIL_DEGRANULATION","REACTOME_CELLULAR_RESPONSE_TO_STARVATION","REACTOME_EXTRACELLULAR_MATRIX_ORGANIZATION","REACTOME_SIGNALING_BY_ROBO_RECEPTORS","KEGG_REGULATION_OF_ACTIN_CYTOSKELETON","REACTOME_ACTIVATION_OF_THE_MRNA_UPON_BINDING_OF_THE_CAP_BINDING_COMPLEX_AND_EIFS_AND_SUBSEQUENT_BINDING_TO_43S","REACTOME_HEMOSTASIS","REACTOME_CDC42_GTPASE_CYCLE","REACTOME_CELL_CYCLE_MITOTIC","HALLMARK_APICAL_JUNCTION","REACTOME_GLYCOSAMINOGLYCAN_METABOLISM","REACTOME_CELL_CYCLE_CHECKPOINTS","REACTOME_METABOLISM_OF_CARBOHYDRATES","REACTOME_M_PHASE","REACTOME_FCGR3A_MEDIATED_IL10_SYNTHESIS","KEGG_FOCAL_ADHESION","REACTOME_RAC1_GTPASE_CYCLE","REACTOME_PARASITE_INFECTION","REACTOME_SEMAPHORIN_INTERACTIONS","REACTOME_MITOTIC_METAPHASE_AND_ANAPHASE","REACTOME_IMMUNOREGULATORY_INTERACTIONS_BETWEEN_A_LYMPHOID_AND_A_NON_LYMPHOID_CELL","REACTOME_CELL_SURFACE_INTERACTIONS_AT_THE_VASCULAR_WALL","REACTOME_FCGAMMA_RECEPTOR_FCGR_DEPENDENT_PHAGOCYTOSIS","REACTOME_MITOCHONDRIAL_TRANSLATION","REACTOME_ANTI_INFLAMMATORY_RESPONSE_FAVOURING_LEISHMANIA_PARASITE_INFECTION","REACTOME_LEISHMANIA_INFECTION","REACTOME_ANTIGEN_ACTIVATES_B_CELL_RECEPTOR_BCR_LEADING_TO_GENERATION_OF_SECOND_MESSENGERS","REACTOME_COMPLEMENT_CASCADE","REACTOME_DISEASES_OF_METABOLISM","REACTOME_FCGR_ACTIVATION","REACTOME_RRNA_MODIFICATION_IN_THE_NUCLEUS_AND_CYTOSOL","REACTOME_SCAVENGING_OF_HEME_FROM_PLASMA","KEGG_CELL_ADHESION_MOLECULES_CAMS","REACTOME_APC_C_MEDIATED_DEGRADATION_OF_CELL_CYCLE_PROTEINS","REACTOME_FCERI_MEDIATED_CA_2_MOBILIZATION","REACTOME_CHONDROITIN_SULFATE_DERMATAN_SULFATE_METABOLISM","REACTOME_HEPARAN_SULFATE_HEPARIN_HS_GAG_METABOLISM","REACTOME_INITIAL_TRIGGERING_OF_COMPLEMENT","HALLMARK_E2F_TARGETS","REACTOME_EPH_EPHRIN_SIGNALING","REACTOME_ROLE_OF_PHOSPHOLIPIDS_IN_PHAGOCYTOSIS","REACTOME_NEURONAL_SYSTEM","REACTOME_DNA_REPLICATION","REACTOME_ROLE_OF_LAT2_NTAL_LAB_ON_CALCIUM_MOBILIZATION","REACTOME_DEPOSITION_OF_NEW_CENPA_CONTAINING_NUCLEOSOMES_AT_THE_CENTROMERE","REACTOME_CD22_MEDIATED_BCR_REGULATION","REACTOME_METABOLISM_OF_AMINO_ACIDS_AND_DERIVATIVES","HALLMARK_UNFOLDED_PROTEIN_RESPONSE","REACTOME_G2_M_CHECKPOINTS","HALLMARK_MTORC1_SIGNALING","KEGG_LEUKOCYTE_TRANSENDOTHELIAL_MIGRATION","REACTOME_NEDDYLATION","REACTOME_MITOTIC_G2_G2_M_PHASES","REACTOME_PLATELET_ACTIVATION_SIGNALING_AND_AGGREGATION"],"enrichmentScore":[0.661577523295302,0.673567624361914,0.674185400867383,0.677498964689979,0.605106808745172,0.632433790264004,0.594220844137772,0.594095883797457,0.629370607712862,0.63235914571043,0.553215500990768,0.586723567838077,0.611175652082129,0.567723103247457,0.535226781105276,0.558023760161972,-0.460373698141427,0.530015573027428,-0.537651304261412,0.489359841736063,-0.542521102486519,0.659079793373557,-0.380127997677546,-0.530542733933247,0.362264363300821,-0.521452923355602,-0.593288185726529,0.421151283705407,-0.437580351252665,0.384995817467859,-0.609101531095232,-0.510177653544038,-0.484345891938996,-0.5546719027697,-0.647657306508153,0.433701172685138,-0.507405221953406,-0.491859714494559,-0.505104169836169,0.534161369910284,-0.498048383409096,-0.431625994360454,-0.597243968831131,-0.594234524902698,-0.469419843501911,-0.623132625228546,0.590402792260355,-0.640370738048466,-0.555749165100527,0.536044917187077,-0.566997508953782,-0.690105870509603,-0.681902872781196,-0.609480680489224,0.415648616220589,-0.539335933852264,-0.567905221465937,-0.412457708681446,0.441560908076698,-0.58820277986841,0.636281156892265,-0.629828563269368,0.367046415658297,0.469787557204789,0.441140160448286,0.397190089587103,-0.524323951703564,0.393815735229442,0.410579908096284,-0.393066756187122],"NES":[2.65864178687458,2.64027761875714,2.61419018548398,2.61358686055958,2.56559299026367,2.55397209064573,2.55225226346343,2.55171554329524,2.52030110379625,2.50768556973467,2.45789155093482,2.45052515666571,2.42374239338087,2.41988320682536,2.34064255628365,2.33018623001455,-2.16389388934365,2.20924766168888,-2.21528273741998,2.08835887223099,-2.25015528726846,2.38436700306267,-1.79449545316213,-2.13966108719915,1.70245994223764,-2.11652039984828,-2.24080278001685,1.84134031195483,-1.90921870850515,1.75938292307405,-2.25135523016339,-2.07085924315014,-2.02151599902674,-2.14610188463868,-2.24812275785365,1.86392053668512,-2.06262492718507,-2.00556767410806,-2.03582837851642,2.08169635067543,-1.99582306418966,-1.87133286194894,-2.19232352444661,-2.17312452619327,-1.93606490561464,-2.13087636629354,2.13358417124715,-2.1406704786584,-2.08248356239841,2.02067760054969,-2.08519377318745,-2.20208908308126,-2.14512855582058,-2.07534882084641,1.75984177763302,-2.0209804843431,-2.04120820568923,-1.76887316958525,1.82504929562893,-2.01142959213546,2.11359045169667,-2.09181833131567,1.6201921984981,1.86299112780258,1.79605962938539,1.69426978949423,-1.97277097971494,1.69354903163157,1.74025578254673,-1.69899138477755],"p.adjust":[1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.86630695755744e-07,2.82593498112504e-07,4.7439570737835e-07,7.811324771411e-07,6.89467034153019e-06,1.85865885222604e-05,2.33008793981136e-05,2.43636798782533e-05,2.69395198923128e-05,5.6891426198507e-05,5.9744694241034e-05,6.85189964105431e-05,9.32185494502189e-05,0.000114722074625552,0.000141291037965358,0.000193648343133036,0.00019562954265605,0.000238728004525362,0.000265702647864076,0.000360467348755842,0.000444179331599625,0.000579135582452185,0.000674483202931618,0.000772467119558754,0.000935690993386661,0.00108856673563617,0.00122281254097951,0.00151372884463557,0.00202183328910533,0.0026473279560091,0.00463560064281115,0.00498782821685569,0.00641523416840663,0.00666196707880098,0.00757332081370924,0.014342947325523,0.0151103694276011,0.0154900514964673,0.0159525733815989,0.0166223329050122,0.0212892820741695,0.0222968487742055,0.0230060924727885,0.0240808868866759,0.0272941562631581,0.0277532451184069,0.0321618430340215,0.0330767155122872,0.0352098140300259,0.0365470406304412,0.0434582974968918,0.0441191322974462,0.0499005504588872]},"columns":[{"id":".rownames","name":"","type":"character","sortable":false,"filterable":false,"rowHeader":true},{"id":"enrichmentScore","name":"enrichmentScore","type":"numeric"},{"id":"NES","name":"NES","type":"numeric"},{"id":"p.adjust","name":"p.adjust","type":"numeric"}],"theme":{"style":{"fontSize":12}},"elementId":"GSEA-Hv-V-T2D","dataKey":"09a97dd486572dce99fd7827b15ce344"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+</div>
+<div id="healthy-control-vs.-diabetic-nephropathy."
+class="section level2">
+<h2>Healthy control Vs. Diabetic Nephropathy.</h2>
+<pre class="r"><code>geneRanks &lt;- RUV_Hv_V_DN %&gt;%
+  mutate(
+    ensemble_id = str_remove(gene_id, &quot;\\.[0-9]+$&quot;),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %&gt;%
+  arrange(desc(signed)) %&gt;% 
+  pluck(&quot;signed&quot;)
+
+terms &lt;- msigdbr_df %&gt;%
+  dplyr::select(gs_name, ensembl_gene)
+
+x &lt;- GSEA(geneRanks,
+     TERM2GENE = terms,
+     pAdjustMethod = &quot;bonferroni&quot;
+     )
+
+
+cp &lt;- htmltools::tags$caption(
+  &quot;Healthy control Vs. Diabetic Nephropathy&quot;
+)
+
+tbl_ID &lt;- &quot;GSEA-Hv-V-DN&quot;
+
+GSEA_tbl &lt;- x %&gt;%
+  pluck(&quot;result&quot;) %&gt;%
+  dplyr::select(enrichmentScore, NES, p.adjust) %&gt;%
+  reactable(
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa(&quot;download&quot;), &quot;Download as CSV&quot;),
+      onclick = glue::glue(&quot;Reactable.downloadDataCSV(&#39;{tbl_ID}&#39;, &#39;{tbl_ID}.csv&#39;)&quot;)
+    ),
+    tags$br(), cp,
+    GSEA_tbl
+  )
+)</code></pre>
+<button onclick="Reactable.downloadDataCSV(&#39;GSEA-Hv-V-DN&#39;, &#39;GSEA-Hv-V-DN.csv&#39;)">
+<svg aria-hidden="true" role="img" viewBox="0 0 512 512" style="height:1em;width:1em;vertical-align:-0.125em;margin-left:auto;margin-right:auto;font-size:inherit;fill:currentColor;overflow:visible;position:relative;"><path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V274.7l-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7V32zM64 352c-35.3 0-64 28.7-64 64v32c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V416c0-35.3-28.7-64-64-64H346.5l-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352H64zm368 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg>
+Download as CSV
+</button>
+<br/>
+<caption>Healthy control Vs. Diabetic Nephropathy</caption>
+<div class="reactable html-widget html-fill-item" id="GSEA-Hv-V-DN" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="GSEA-Hv-V-DN">{"x":{"tag":{"name":"Reactable","attribs":{"data":{".rownames":["KEGG_SPLICEOSOME","HALLMARK_TNFA_SIGNALING_VIA_NFKB","HALLMARK_MYC_TARGETS_V1","REACTOME_TRANSLATION","REACTOME_PROCESSING_OF_CAPPED_INTRON_CONTAINING_PRE_MRNA","REACTOME_MITOCHONDRIAL_TRANSLATION","REACTOME_MRNA_SPLICING","REACTOME_RRNA_PROCESSING","HALLMARK_MTORC1_SIGNALING","REACTOME_M_PHASE","REACTOME_HIV_INFECTION","REACTOME_CELL_CYCLE_CHECKPOINTS","REACTOME_CELL_CYCLE_MITOTIC","REACTOME_MITOTIC_METAPHASE_AND_ANAPHASE","HALLMARK_OXIDATIVE_PHOSPHORYLATION","REACTOME_REGULATION_OF_EXPRESSION_OF_SLITS_AND_ROBOS","REACTOME_CELLULAR_RESPONSE_TO_STARVATION","REACTOME_EUKARYOTIC_TRANSLATION_INITIATION","HALLMARK_UV_RESPONSE_UP","REACTOME_SEPARATION_OF_SISTER_CHROMATIDS","REACTOME_HIV_LIFE_CYCLE","REACTOME_TRANSPORT_OF_MATURE_TRANSCRIPT_TO_CYTOPLASM","REACTOME_G2_M_CHECKPOINTS","REACTOME_SRP_DEPENDENT_COTRANSLATIONAL_PROTEIN_TARGETING_TO_MEMBRANE","REACTOME_MITOTIC_G2_G2_M_PHASES","HALLMARK_UNFOLDED_PROTEIN_RESPONSE","REACTOME_RESPONSE_OF_EIF2AK4_GCN2_TO_AMINO_ACID_DEFICIENCY","REACTOME_TRNA_PROCESSING","REACTOME_APC_C_CDH1_MEDIATED_DEGRADATION_OF_CDC20_AND_OTHER_APC_C_CDH1_TARGETED_PROTEINS_IN_LATE_MITOSIS_EARLY_G1","REACTOME_INTERLEUKIN_1_FAMILY_SIGNALING","REACTOME_APC_C_MEDIATED_DEGRADATION_OF_CELL_CYCLE_PROTEINS","REACTOME_NONSENSE_MEDIATED_DECAY_NMD","KEGG_PROTEASOME","REACTOME_UB_SPECIFIC_PROCESSING_PROTEASES","REACTOME_INFLUENZA_INFECTION","REACTOME_ACTIVATION_OF_THE_MRNA_UPON_BINDING_OF_THE_CAP_BINDING_COMPLEX_AND_EIFS_AND_SUBSEQUENT_BINDING_TO_43S","REACTOME_SIGNALING_BY_INTERLEUKINS","REACTOME_REGULATION_OF_HSF1_MEDIATED_HEAT_SHOCK_RESPONSE","REACTOME_INTERLEUKIN_1_SIGNALING","REACTOME_SIGNALING_BY_ROBO_RECEPTORS"],"enrichmentScore":[0.657429673643418,0.619322711560681,0.60752162045954,0.570325627037961,0.568427302892279,0.643888178260855,0.569710785544403,0.53096134126734,0.527487573667158,0.449938593566916,0.487052198124008,0.482513922112028,0.406638352088091,0.494974102240988,0.486375155298133,0.508825081226306,0.516492257226895,0.539202786545532,0.522125075891985,0.476115256712451,0.50501382607197,0.568367138126751,0.50282397037756,0.524625608886685,0.467077137380395,0.519258925810617,0.546517016868859,0.524600257260839,0.583494204110324,0.507280701637436,0.568529403108621,0.499011468357749,0.652803390786955,0.459784447936036,0.468349176400342,0.596276114206619,0.383774048584702,0.558988269562575,0.518561221195445,0.432259602804973],"NES":[2.42542816172947,2.40217337111513,2.39085991261852,2.3241666457016,2.27775540517484,2.27481811377985,2.22030743977472,2.0895621542259,2.06287834480292,1.86607209435535,1.93396541195371,1.93493176246474,1.72226053708415,1.95809023558064,1.92012739761031,1.94008502979129,1.95376345875271,1.9817035135639,1.93934861868038,1.82162473514584,1.89900816984408,1.95481749575619,1.87241687732019,1.92082199740785,1.80780421868696,1.90117285575138,1.94509614378545,1.91204936192179,1.95456116877492,1.87261488583596,1.94736194924755,1.82516843502856,1.99286239099134,1.76699455546158,1.78589516727725,1.95451680116633,1.5958952801807,1.89608124494258,1.84090226341214,1.6843551348156],"p.adjust":[1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,1.29e-07,3.75473010406e-07,7.01536325654274e-07,1.27714107947246e-05,1.30690672657254e-05,2.27005588534851e-05,2.92489820568278e-05,0.000100096005299645,0.000192397264088843,0.000482165621049731,0.000833922518624099,0.00102091617413926,0.00143892405325416,0.00183564035088098,0.00294755920876718,0.00374270806313645,0.00485332714271921,0.00699722982147263,0.0072282704287854,0.00789372851352758,0.00992615280195619,0.0104973221772994,0.0109085656726164,0.0131051384476498,0.0155700401519263,0.0194944169581874,0.0219373592395476,0.0229124152314181,0.0270780498244845,0.0283288600806828,0.0342415375728344,0.0370227935268758,0.0480606828032661]},"columns":[{"id":".rownames","name":"","type":"character","sortable":false,"filterable":false,"rowHeader":true},{"id":"enrichmentScore","name":"enrichmentScore","type":"numeric"},{"id":"NES","name":"NES","type":"numeric"},{"id":"p.adjust","name":"p.adjust","type":"numeric"}],"theme":{"style":{"fontSize":12}},"elementId":"GSEA-Hv-V-DN","dataKey":"d75164a89daf31d010c9fc102ba4ad45"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+</div>
+<div id="type-2-diabetes-vs.-diabetic-nephropathy."
+class="section level2">
+<h2>Type 2 Diabetes Vs. Diabetic Nephropathy.</h2>
+<pre class="r"><code>geneRanks &lt;- RUV_T2D_V_DN%&gt;%
+  mutate(
+    ensemble_id = str_remove(gene_id, &quot;\\.[0-9]+$&quot;),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %&gt;%
+  arrange(desc(signed)) %&gt;% 
+  pluck(&quot;signed&quot;)
+
+terms &lt;- msigdbr_df %&gt;%
+  dplyr::select(gs_name, ensembl_gene)
+
+x &lt;- GSEA(geneRanks,
+     TERM2GENE = terms,
+     pAdjustMethod = &quot;bonferroni&quot;
+     )
+
+
+cp &lt;- htmltools::tags$caption(
+  &quot;Type 2 Diabetes Vs. Diabetic Nephropathy&quot;
+)
+
+tbl_ID &lt;- &quot;GSEA-T2D-V-DN&quot;
+
+GSEA_tbl &lt;- x %&gt;%
+  pluck(&quot;result&quot;) %&gt;%
+  dplyr::select(enrichmentScore, NES, p.adjust) %&gt;%
+  reactable(
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa(&quot;download&quot;), &quot;Download as CSV&quot;),
+      onclick = glue::glue(&quot;Reactable.downloadDataCSV(&#39;{tbl_ID}&#39;, &#39;{tbl_ID}.csv&#39;)&quot;)
+    ),
+    tags$br(), cp,
+    GSEA_tbl
+  )
+)</code></pre>
+<button onclick="Reactable.downloadDataCSV(&#39;GSEA-T2D-V-DN&#39;, &#39;GSEA-T2D-V-DN.csv&#39;)">
+<svg aria-hidden="true" role="img" viewBox="0 0 512 512" style="height:1em;width:1em;vertical-align:-0.125em;margin-left:auto;margin-right:auto;font-size:inherit;fill:currentColor;overflow:visible;position:relative;"><path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V274.7l-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7V32zM64 352c-35.3 0-64 28.7-64 64v32c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V416c0-35.3-28.7-64-64-64H346.5l-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352H64zm368 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg>
+Download as CSV
+</button>
+<br/>
+<caption>Type 2 Diabetes Vs. Diabetic Nephropathy</caption>
+<div class="reactable html-widget html-fill-item" id="GSEA-T2D-V-DN" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="GSEA-T2D-V-DN">{"x":{"tag":{"name":"Reactable","attribs":{"data":{".rownames":["REACTOME_NEUTROPHIL_DEGRANULATION","REACTOME_HEMOSTASIS","REACTOME_RESPONSE_TO_ELEVATED_PLATELET_CYTOSOLIC_CA2","REACTOME_EUKARYOTIC_TRANSLATION_ELONGATION","REACTOME_PLATELET_ACTIVATION_SIGNALING_AND_AGGREGATION","KEGG_RIBOSOME","HALLMARK_GLYCOLYSIS","REACTOME_PARASITE_INFECTION","REACTOME_RESPONSE_OF_EIF2AK4_GCN2_TO_AMINO_ACID_DEFICIENCY","REACTOME_CELL_SURFACE_INTERACTIONS_AT_THE_VASCULAR_WALL","REACTOME_GPCR_LIGAND_BINDING","REACTOME_EUKARYOTIC_TRANSLATION_INITIATION","REACTOME_LEISHMANIA_INFECTION","REACTOME_CLASS_A_1_RHODOPSIN_LIKE_RECEPTORS","REACTOME_NONSENSE_MEDIATED_DECAY_NMD","REACTOME_FCGAMMA_RECEPTOR_FCGR_DEPENDENT_PHAGOCYTOSIS","REACTOME_ANTI_INFLAMMATORY_RESPONSE_FAVOURING_LEISHMANIA_PARASITE_INFECTION","REACTOME_FCGR_ACTIVATION","REACTOME_FCGR3A_MEDIATED_IL10_SYNTHESIS","REACTOME_PEPTIDE_LIGAND_BINDING_RECEPTORS","REACTOME_G_ALPHA_I_SIGNALLING_EVENTS","REACTOME_SIGNALING_BY_GPCR","REACTOME_CHEMOKINE_RECEPTORS_BIND_CHEMOKINES","KEGG_CYTOKINE_CYTOKINE_RECEPTOR_INTERACTION","HALLMARK_XENOBIOTIC_METABOLISM","KEGG_CHEMOKINE_SIGNALING_PATHWAY","REACTOME_SCAVENGING_OF_HEME_FROM_PLASMA","HALLMARK_ALLOGRAFT_REJECTION","REACTOME_IMMUNOREGULATORY_INTERACTIONS_BETWEEN_A_LYMPHOID_AND_A_NON_LYMPHOID_CELL","KEGG_REGULATION_OF_ACTIN_CYTOSKELETON","REACTOME_BINDING_AND_UPTAKE_OF_LIGANDS_BY_SCAVENGER_RECEPTORS"],"enrichmentScore":[-0.542952977416849,-0.493374817600574,-0.67336922232048,0.666154766515759,-0.561476405466956,0.660545878141085,-0.579624492844244,-0.643802926489913,0.606873478731838,-0.590781085646166,-0.569152015884689,0.562271385562154,-0.51790148289288,-0.594790621543831,0.568682712034238,-0.575426881339466,-0.581259025836644,-0.707736474516536,-0.653227739241557,-0.660428644704035,-0.536002038746396,-0.445259993194984,-0.761362592543827,-0.526156875309561,-0.524720759490914,-0.530925133309757,-0.677429454635589,-0.502982178601657,-0.529299722016584,-0.504381085142791,-0.626779204329801],"NES":[-2.1027191386903,-1.91658524140943,-2.19452901831436,2.31513543038221,-2.02086144828851,2.28402182121454,-2.01968240887037,-2.09096594907488,2.12345887504678,-2.02308360469138,-1.98319140865621,2.0496336707272,-1.86520982344704,-1.99978120582393,2.05925117801017,-1.94581534298931,-1.95703781613178,-2.09283766528701,-2.03318446414066,-2.02622959460109,-1.86768140777249,-1.68185109615033,-2.06481845756727,-1.81745801483423,-1.81522834218586,-1.82013070778681,-1.9553685522049,-1.77524496232187,-1.79536619272184,-1.75557271556604,-1.90596730815738],"p.adjust":[1.29e-07,1.29e-07,2.80470663395742e-07,2.83755162335414e-07,9.4380418042468e-07,1.65335054146323e-06,1.70372021405562e-05,2.18284008152799e-05,3.1035331017473e-05,4.73396890245751e-05,6.36489274707886e-05,8.56979394349015e-05,0.00012707845451021,0.000128717359835006,0.000131485992803398,0.000421752172259072,0.000503836601335081,0.000512550850900294,0.000953332546725988,0.00192392156178571,0.00249487336059114,0.00258619252059639,0.00344202057408921,0.00371247151126624,0.00581518505816123,0.0128590075717013,0.0142316740961655,0.0185740636989536,0.0279547054601911,0.0312480289199945,0.0368382945558117]},"columns":[{"id":".rownames","name":"","type":"character","sortable":false,"filterable":false,"rowHeader":true},{"id":"enrichmentScore","name":"enrichmentScore","type":"numeric"},{"id":"NES","name":"NES","type":"numeric"},{"id":"p.adjust","name":"p.adjust","type":"numeric"}],"theme":{"style":{"fontSize":12}},"elementId":"GSEA-T2D-V-DN","dataKey":"657c0ba438079efba37917e9388b0857"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

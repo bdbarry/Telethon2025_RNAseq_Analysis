@@ -1,7 +1,7 @@
 name: 'Analysis of Type 2 diebetic, Diabetic nerphopathy and Healthy blood'
 output_dir: ../docs
 navbar:
-  title: "Type 2 diabetes analysis (Bulk RNA)"
+  title: "Type 2 diabetes analysis (GSE154881)"
   left:
   - icon: fa-home
     text: Home

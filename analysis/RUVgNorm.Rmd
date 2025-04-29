@@ -42,7 +42,7 @@ For this analysis we use `RUVSeq`
 
 RUVg normalization is performed in several fundamental steps: 
 
-### Step 1: run a normal DGE 
+Step 1: run a normal DGE 
   1.1: design of a model matrix (here we use the same design as the TMM normalization).
   
   1.2: A fit is then constructed using normalization factor (here we use TMM)
@@ -50,12 +50,12 @@ RUVg normalization is performed in several fundamental steps:
   1.3: perform GLMQLF test.
      note: here we have no contrasts and are instead performing an ANOVA-like test - this is what allows us to identify genes which do not vary between samples. 
      
-### Step 2: identify the DEG
+Step 2: identify the DEG
 
-### Step 3: create a set of 5000 "empirical" genes with the highest PValue (ie. not changing). 
+Step 3: create a set of 5000 "empirical" genes with the highest PValue (ie. not changing). 
   note: this is somewhat arbitrary
 
-### Step 4: run RUVg to estimate the variation (where estimated factor of unwanted variation (k) = 1)
+Step 4: run RUVg to estimate the variation (where estimated factor of unwanted variation (k) = 1)
 
 
 ```{r ruvg-nomralisation}
