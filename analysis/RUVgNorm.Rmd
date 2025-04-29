@@ -1,0 +1,507 @@
+---
+title: "RUVg Normalisation"
+author: "Ben Barry"
+date: "2025-04-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load-Libraries}
+library(tidyverse)
+library(extraChIPs)
+library(here)
+library(edgeR)
+library(patchwork)
+library(reactable)
+library(htmltools)
+library(plotly)
+library(pander)
+panderOptions("big.mark", ",")
+panderOptions("missing", "")
+format_p <- function(x) {
+  fmt <- ifelse(x < 0.001, "%.2e", "%.3f")
+  sprintf(fmt, x)
+}
+```
+
+
+```{r load-data}
+
+SE_outlier_removed <- read_rds(here::here("data/processed/SE_outlier_removed.rds"))
+
+```
+
+## RUVg Normalisation.
+
+The primary aim of RUVg normalisation is to identify and a priori set of genes which do not change much between samples as use those to normalise the data.
+
+For this analysis we use `RUVSeq`
+
+RUVg normalization is performed in several fundamental steps: 
+
+### Step 1: run a normal DGE 
+  1.1: design of a model matrix (here we use the same design as the TMM normalization).
+  
+  1.2: A fit is then constructed using normalization factor (here we use TMM)
+  
+  1.3: perform GLMQLF test.
+     note: here we have no contrasts and are instead performing an ANOVA-like test - this is what allows us to identify genes which do not vary between samples. 
+     
+### Step 2: identify the DEG
+
+### Step 3: create a set of 5000 "empirical" genes with the highest PValue (ie. not changing). 
+  note: this is somewhat arbitrary
+
+### Step 4: run RUVg to estimate the variation (where estimated factor of unwanted variation (k) = 1)
+
+
+```{r ruvg-nomralisation}
+library(RUVSeq)
+
+# step 1: run a normal DGE 
+  # 1.1: same model design as before.
+model <- model.matrix(~ disease_state, data = colData(SE_outlier_removed))
+# model
+
+  # 1.2: same fit as before using TMM for normlaisation
+fit <- SE_outlier_removed %>%
+  calcNormFactors(method = "TMM") %>%
+  estimateDisp(design = model) %>%
+  glmQLFit(model)
+
+# 1.3: perform GLMQLF test.
+      # note: here we have no contrasts and are instead performing an ANOVA-like test  
+
+QLFTest <- glmQLFTest(fit, coef = 2:3)
+# QLFTest
+
+
+# step 2: return the differential expressed genes.
+
+QLFtop <- QLFTest %>%
+  topTags(n = Inf) %>%
+  pluck("table") %>%
+  dplyr::select(
+    starts_with("gene"),
+    logCPM,
+    'F',
+    PValue,
+    FDR)
+
+
+#step 3: create a set of 5000 of genes with the highest PValue (ie. not changing). 
+  # note: this is somewhat arbitrary
+
+emperical <- QLFtop %>%
+  dplyr::arrange(desc(PValue)) %>%
+  .[1:5000,] %>%
+  .$gene_id
+
+
+# step 4: run RUVg (where estimated factor of unwanted variation (k) = 1)
+
+ruvg <- RUVg(assay(SE_outlier_removed, "counts"), emperical, k = 1) 
+ruvg$W
+
+# due to compatibility issues  - convert to a DGElist object 
+ruv_dge <- DGEList(
+  counts = ruvg$normalizedCounts,
+  samples = cbind(colData(SE_outlier_removed), ruvg$W),
+  genes = rowRanges(SE_outlier_removed))
+
+# use extraChIPs to plot data 
+plotAssayRle(SE_outlier_removed, "RUVGnorm", fill = "disease_state") +
+  scale_fill_brewer(palette = "Accent") + 
+  theme_bw()
+
+
+```
+
+Here we can see that the mean relative log expression across all samples sits around 0. This indicates the normalization is effective. 
+
+We then proceed to generate the fit and model from the subsequent DGEA.
+As with the TMM normalisation alone, here we used the Quasi-liklihood method to generate the model fit.
+```{r RUVG_fit_and_model}
+
+# create a new design model including the estimated variation.
+
+RUVg_model <- model.matrix(~ disease_state + W_1, data = ruv_dge$samples)
+
+
+# create a new fit
+  # note: We still use TMM normalisation here 
+
+RUVg_fit <- ruv_dge %>%
+  calcNormFactors(method = "TMM") %>%
+  estimateDisp(RUVg_model) %>%
+  glmQLFit(RUVg_model)
+
+# create a new contrast matrix with the levels from model. 
+
+RUVg_contrasts <- makeContrasts(
+  T2D_v_DN = disease_statetype2_diabetes - disease_stateDiabetic_nephropathy,  
+  Hv_v_T2D = disease_statetype2_diabetes,
+  Hv_v_DN = disease_stateDiabetic_nephropathy,
+  levels = RUVg_model)
+
+```
+
+## Health Control Vs. Type 2 Diabetes
+As before we perform differential expression using the `glmTreat` function, with the Log2FC threshold set at 1.2.
+here we show a brief summary of DEG's
+```{r HV-vs-T2D}
+
+RUV_Hv_V_T2D <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "Hv_v_T2D"],  lfc = log2(1.2)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+    mutate(Significant = PValue < 0.05) %>%
+    mutate(direction = case_when(
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == FALSE ~ "NotSignificant")
+    )
+
+RUV_Hv_V_T2D %>%
+  summarise(
+    n = dplyr::n(),
+    .by = direction
+  ) %>% 
+  dplyr::rename_with(str_to_title) %>% 
+  pander(
+    justify = "lr",
+    caption = "Summary of significant DE genes by direction"
+  )
+
+
+```
+
+### MA plot (Health Control Vs. Type 2 Diabetes)
+```{r MA_RUV_Hv_V_T2D }
+MA_RUV_Hv_V_T2D  <- RUV_Hv_V_T2D %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction,
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  geom_smooth(method = "glm", colour = "#386CB0") +
+  ggtitle("Health control vs Type 2 diabetes MA plot (RUVg normalisation)")
+MA_RUV_Hv_V_T2D 
+
+```
+
+### Volcano plot (Health Control Vs. Type 2 Diabetes)
+```{r RUV_Hv_V_T2D-Vol-plot}
+vol_RUV_Hv_V_T2D  <- RUV_Hv_V_T2D %>%
+  ggplot(aes(
+    x = logFC,
+    y = -log10(PValue)
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction, 
+                 alpha = logCPM, 
+                 #size = logCPM, 
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  scale_alpha(range = c(0.3, 1)) +
+  #scale_size(range = c(1, 4)) + 
+  ggtitle("Health Control Vs. Type 2 Diabetes volcano plot (RUVg normaisation)")
+# ggplotly(vol_Hv_v_T2D_treat, tooltip = c("text", "logCPM"))
+
+vol_RUV_Hv_V_T2D
+
+
+```
+
+### Table of DEGS (Healthy Control vs Type 2 Diabetes)
+```{r RUV_Hv_V_T2D-DEG-summary}
+
+cp <- htmltools::tags$caption(
+  "Healthy Control vs Type 2 Diabetes"
+)
+
+tbl_ID <- "tbl-RUV-Hv-V-T2D"
+
+tbl <- RUV_Hv_V_T2D %>%
+  dplyr::filter(Significant == TRUE) %>%
+  dplyr::select(-c("start", "end", "width", "detected")) %>%
+  reactable(
+    filterable = TRUE,
+    columns = list(
+      seqnames = colDef("Chr", maxWidth = 70),
+      logFC = colDef(format = colFormat(digits = 2)),
+      unshrunk.logFC = colDef(show = FALSE),
+      Significant = colDef(show = FALSE),
+      PValue = colDef(
+        cell = \(value) format_p(value)
+      ),
+      FDR = colDef(
+        cell = \(value) format_p(value)
+      ),
+      logCPM = colDef(
+        cell = \(value) format_p(value))
+    ),
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', '{tbl_ID}.csv')")
+    ),
+    tags$br(), cp,
+    tbl
+  )
+)
+
+
+```
+
+## Healthy control vs. Diabetic Nephropathy.
+
+### Summary of DEG's
+```{r HV-vs-DN}
+
+RUV_Hv_V_DN <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "Hv_v_DN"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05) %>%
+  mutate(direction = case_when(
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == FALSE ~ "NotSignificant")
+    )
+
+RUV_Hv_V_DN %>%
+  summarise(
+    n = dplyr::n(),
+    .by = direction
+  ) %>% 
+  dplyr::rename_with(str_to_title) %>% 
+  pander(
+    justify = "lr",
+    caption = "Summary of significant DE genes by direction"
+  )
+
+
+```
+
+### MA plot (Health Control Vs. Diabetic Nephropathy)
+```{r MA_RUV_Hv_V_DN }
+MA_RUV_Hv_V_DN <- RUV_Hv_V_DN %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction,
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  geom_smooth(method = "glm", colour = "#386CB0") +
+  ggtitle("Health control vs Diabetic Nephropathy MA plot (RUVg normalisation)")
+MA_RUV_Hv_V_DN 
+
+```
+
+### Volcano plot (Health Control Vs. Diabetic Nephropathy)
+
+```{r RUV_Hv_V_DN-Vol-plot}
+vol_RUV_Hv_V_DN  <- RUV_Hv_V_DN %>%
+  ggplot(aes(
+    x = logFC,
+    y = -log10(PValue)
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction, 
+                 alpha = logCPM, 
+                 #size = logCPM, 
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  scale_alpha(range = c(0.3, 1)) +
+  #scale_size(range = c(1, 4)) + 
+  ggtitle("Health Control Vs. Diabetic Nephropathy volcano plot (RUVg normaisation)")
+# ggplotly(vol_Hv_v_T2D_treat, tooltip = c("text", "logCPM"))
+
+vol_RUV_Hv_V_DN
+
+
+```
+
+### Table of DEGS (Healthy Control vs Diabetic Nephropathy)
+```{r RUV_Hv_V_DN-DEG-summary}
+
+cp <- htmltools::tags$caption(
+  "Healthy Control vs Diabetic Nephropathy"
+)
+
+tbl_ID <- "tbl-RUV-Hv-V-DN"
+
+tbl <- RUV_Hv_V_DN %>%
+  dplyr::filter(Significant == TRUE) %>%
+  dplyr::select(-c("start", "end", "width", "detected")) %>%
+  reactable(
+    filterable = TRUE,
+    columns = list(
+      seqnames = colDef("Chr", maxWidth = 70),
+      logFC = colDef(format = colFormat(digits = 2)),
+      unshrunk.logFC = colDef(show = FALSE),
+      Significant = colDef(show = FALSE),
+      PValue = colDef(
+        cell = \(value) format_p(value)
+      ),
+      FDR = colDef(
+        cell = \(value) format_p(value)
+      ),
+      logCPM = colDef(
+        cell = \(value) format_p(value))
+    ),
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', '{tbl_ID}.csv')")
+    ),
+    tags$br(), cp,
+    tbl
+  )
+)
+
+
+```
+
+## Type 2 diabetes vs. Diabetic Nephropathy.
+
+### Summary of DEG's
+```{r T2D-vs-DN}
+
+RUV_T2D_V_DN <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "T2D_v_DN"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05) %>%
+  mutate(direction = case_when(
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == FALSE ~ "NotSignificant")
+    )
+
+RUV_T2D_V_DN %>%
+  summarise(
+    n = dplyr::n(),
+    .by = direction
+  ) %>% 
+  dplyr::rename_with(str_to_title) %>% 
+  pander(
+    justify = "lr",
+    caption = "Summary of significant DE genes by direction"
+  )
+
+
+```
+
+### MA plot (Tye 2 Diabetes Vs. Diabetic Nephropathy)
+```{r MA_RUV_T2D_V_DN }
+MA_RUV_T2D_V_DN <- RUV_T2D_V_DN %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+    )
+  ) + 
+  theme_bw()+
+  geom_point(aes(colour = direction,
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  geom_smooth(method = "glm", colour = "#386CB0") +
+  ggtitle("Type 2 diabetes vs Diabetic Nephropathy MA plot (RUVg normalisation)")
+MA_RUV_T2D_V_DN 
+
+```
+
+### Volcano plot (Type 2 Diabetes Vs. Diabetic Nephropathy)
+
+```{r RUV_T2D_V_DN-Vol-plot}
+vol_RUV_T2D_V_DN  <- RUV_T2D_V_DN %>%
+  ggplot(aes(
+    x = logFC,
+    y = -log10(PValue)
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction, 
+                 alpha = logCPM, 
+                 #size = logCPM, 
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  scale_alpha(range = c(0.3, 1)) +
+  #scale_size(range = c(1, 4)) + 
+  ggtitle("Type 2 Diabetes Vs. Diabetic Nephropathy volcano plot (RUVg normaisation)")
+# ggplotly(vol_Hv_v_T2D_treat, tooltip = c("text", "logCPM"))
+
+vol_RUV_T2D_V_DN
+
+
+```
+
+### Table of DEGS (Type 2 Diabetes vs Diabetic Nephropathy)
+```{r RUV_T2D_V_DN-DEG-summary}
+
+cp <- htmltools::tags$caption(
+  "Type 2 Diabetes  vs Diabetic Nephropathy"
+)
+
+tbl_ID <- "tbl-RUV-T2D-V-DN"
+
+tbl <- RUV_T2D_V_DN %>%
+  dplyr::filter(Significant == TRUE) %>%
+  dplyr::select(-c("start", "end", "width", "detected")) %>%
+  reactable(
+    filterable = TRUE,
+    columns = list(
+      seqnames = colDef("Chr", maxWidth = 70),
+      logFC = colDef(format = colFormat(digits = 2)),
+      unshrunk.logFC = colDef(show = FALSE),
+      Significant = colDef(show = FALSE),
+      PValue = colDef(
+        cell = \(value) format_p(value)
+      ),
+      FDR = colDef(
+        cell = \(value) format_p(value)
+      ),
+      logCPM = colDef(
+        cell = \(value) format_p(value))
+    ),
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', '{tbl_ID}.csv')")
+    ),
+    tags$br(), cp,
+    tbl
+  )
+)
+
+
+```

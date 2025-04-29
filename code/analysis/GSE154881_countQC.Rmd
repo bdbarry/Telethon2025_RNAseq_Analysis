@@ -24,6 +24,11 @@ library(patchwork)
 library(limma)
 ```
 
+## Introduction
+Raw count data was obtained from 'GSE154881'. This data contains 15 samples from 3 disease states, healthy, type 2 Diabetic and Diabetic Nephropathy. Methodological information can be found at the GEO site, however, of note a RIN score of >5 was used as the threshold for RNA quality, this is rather low and may reflect downstream QC decisions. 
+Following download of data, an initial parameter was set to only keep transcripts whose counts were greater than 0. 
+
+
 
 ```{r loading data}
 # create a count matrix
@@ -94,7 +99,7 @@ se <- SummarizedExperiment(                    # create a summarisedExperiment o
 rowRanges(se) <- GencodeV34 %>% 
   subset(type == "gene") %>%                      #keep only genes
   select(starts_with("gene")) %>%                 #keep only the columns which starts with "gene"
-  mutate(gene_length = gene_lengths[gene_id]) %>% #create a new columns called gene_length using the vector from gene_lengths
+  mutate(gene_length = gene_lengths[gene_id]) %>% #create a new columns called gene_length using the vector from                                                         gene_lengths
   setNames(nm = mcols(.)$gene_id) %>%             #set name using the column names from gene_id in gencodeV34 
   .[rownames(se)]                                 #reorder the GencodeV34 to match rownames in se
 
@@ -139,7 +144,7 @@ se %>%
 se_detected <- subset(se, detected) 
 
 assay(se_detected, "norm_logCPM") <- se_detected %>% 
-  calcNormFactors() %>% 
+  calcNormFactors("TMM") %>% 
   cpm(log = TRUE)
 
 se_detected %>%

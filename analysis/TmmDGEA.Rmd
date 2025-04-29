@@ -1,0 +1,435 @@
+---
+title: "Trimmed Mean of M-Value (TMM) Normalisation"
+author: "Ben Barry"
+date: "2025-04-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load-Libraries}
+library(tidyverse)
+library(extraChIPs)
+library(here)
+library(edgeR)
+library(patchwork)
+library(reactable)
+library(htmltools)
+library(plotly)
+library(pander)
+panderOptions("big.mark", ",")
+panderOptions("missing", "")
+format_p <- function(x) {
+  fmt <- ifelse(x < 0.001, "%.2e", "%.3f")
+  sprintf(fmt, x)
+}
+```
+
+
+```{r load-data}
+
+SE_outlier_removed <- read_rds(here::here("data/processed/SE_outlier_removed.rds"))
+
+
+```
+
+
+## Design + contrast Matrix
+
+Following the exclusion of two health controls samples (HV_3 and HV_4), we proceeded to perform differential gene expression analysis using EdgeR. Initially this was performed on the TMM normalized data. First a design matrix and contrast matrix was setup to allow for comparison between all groups of interest.
+```{r Design-matrix}
+model <- model.matrix(~ disease_state, data = colData(SE_outlier_removed))
+head(model)
+
+```
+```{r contrast-matrix}
+contrastMatrix <- makeContrasts(
+  T2D_v_DN = disease_statetype2_diabetes - disease_stateDiabetic_nephropathy,  
+  Hv_v_T2D = disease_statetype2_diabetes,
+  Hv_v_DN = disease_stateDiabetic_nephropathy,
+  levels = model)
+
+head(contrastMatrix)
+```
+
+
+### Quasi-likelihood GLM
+
+We then applied a Quasi-likelihood GLM to create the model fit, this is now recognized by the authors of EdgeR as the most robust method.
+
+```{r GLM-QL-fit}
+
+fit <- SE_outlier_removed %>%
+  calcNormFactors(method = "TMM") %>%
+  estimateDisp(design = model) %>%
+  glmQLFit(model)
+
+```
+
+
+## Differential expression
+
+To perform differential expression we then used the `glmTreat` function, which utilized a t-test relative to a set threshold of the log2-FC. In practice this means we are testing whether the observed logFC is greater than this defined value, as opposed to 0. For this analysis, this value was set at log2(1.2) 
+
+
+## Healthy vs. Type 2 Diabetes
+
+```{r Healthy-vs-Type2Diabetes}
+Hv_v_T2D_treat <- glmTreat(
+  fit, contrast = contrastMatrix[, "Hv_v_T2D"],  lfc = log2(1.2)) %>%
+  topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+  mutate(Significant = PValue < 0.05) %>%
+    mutate(direction = case_when(
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == FALSE ~ "NotSignificant"))
+
+
+Hv_v_T2D_treat %>%
+  summarise(
+    n = dplyr::n(),
+    .by = direction
+  ) %>% 
+  dplyr::rename_with(str_to_title) %>% 
+  pander(
+    justify = "lr",
+    caption = "Summary of significant DE genes by direction"
+  )
+```
+
+### MA plot
+```{r control-vs-diabetes-MA-plot}
+
+MA_Hv_v_T2D_treat <- Hv_v_T2D_treat %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction,
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  geom_smooth(method = "glm", colour = "#386CB0") +
+  ggtitle("Healthy vs Type 2 diabetic MA plot")
+MA_Hv_v_T2D_treat
+#ggplotly(MA_Hv_v_T2D_treat, tooltip = "text")
+```
+
+### Volcano Plot
+```{r control-vs-diabetes-Volcano-plot}
+
+vol_Hv_v_T2D_treat <- Hv_v_T2D_treat%>%
+  ggplot(aes(
+    x = logFC,
+    y = -log10(PValue)
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction, 
+                 alpha = logCPM, 
+                 #size = logCPM, 
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  scale_alpha(range = c(0.3, 1)) +
+  #scale_size(range = c(1, 4)) + 
+  ggtitle("Healthy vs Type 2 diabetic volcano plot")
+# ggplotly(vol_Hv_v_T2D_treat, tooltip = c("text", "logCPM"))
+
+vol_Hv_v_T2D_treat 
+
+```
+
+### Summary of DEG's
+
+```{r tbl-HV-vs-T2D}
+cp <- htmltools::tags$caption(
+  "Healthy control vs Type 2 Diabetes"
+)
+
+tbl_ID <- "tbl-HV-vs-T2D"
+
+tbl <- Hv_v_T2D_treat %>%
+  
+  dplyr::filter(Significant == TRUE) %>%
+  dplyr::select(-c("start", "end", "width", "detected")) %>%
+  reactable(
+    filterable = TRUE,
+    columns = list(
+      seqnames = colDef("Chr", maxWidth = 70),
+      logFC = colDef(format = colFormat(digits = 2)),
+      unshrunk.logFC = colDef(show = FALSE),
+      Significant = colDef(show = FALSE),
+      PValue = colDef(
+        cell = \(value) format_p(value)
+      ),
+      FDR = colDef(
+        cell = \(value) format_p(value)
+      ),
+      logCPM = colDef(
+        cell = \(value) format_p(value))
+    ),
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', 'HVvsT2Ddge.csv')")
+    ),
+    tags$br(), cp,
+    tbl
+  )
+)
+```
+
+
+
+## Heathly control vs. Diabetic nephropathy 
+
+
+```{r HV-vs-DN-summary-of-DE-genes}
+
+Hv_v_DN_treat <- glmTreat(fit, contrast = contrastMatrix[, "Hv_v_DN"],  lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+   as_tibble() %>%
+  mutate(Significant = PValue < 0.05) %>%
+    mutate(direction = case_when(
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == FALSE ~ "NotSignificant")
+    )
+
+Hv_v_DN_treat  %>%
+  summarise(
+    n = dplyr::n(),
+    .by = direction
+  ) %>% 
+  dplyr::rename_with(str_to_title) %>% 
+  pander(
+    justify = "lr",
+    caption = "Summary of significant DE genes by direction"
+  )
+
+```
+
+### MA plot
+```{r HV-vs-DN-MA-plot}
+MA_Hv_v_DN_treat <- Hv_v_DN_treat %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction,
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  geom_smooth(method = "glm", colour = "#386CB0") +
+  ggtitle("Healthy vs Diabetic nephropathy MA plot")
+MA_Hv_v_DN_treat
+
+
+
+```
+
+### Volcano plot
+```{r HV-vs-DN-volc-plot}
+vol_Hv_v_DN_treat <- Hv_v_DN_treat %>%
+  ggplot(aes(
+    x = logFC,
+    y = -log10(PValue)
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction, 
+                 alpha = logCPM, 
+                 #size = logCPM, 
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  scale_alpha(range = c(0.3, 1)) +
+  #scale_size(range = c(1, 4)) + 
+  ggtitle("Healthy vs Dibetic nephropathy volcano plot")
+# ggplotly(vol_Hv_v_T2D_treat, tooltip = c("text", "logCPM"))
+
+vol_Hv_v_DN_treat
+
+
+```
+
+### Table summary of DGE's
+```{r table-of-DEG-HV-vs-DN}
+
+cp <- htmltools::tags$caption(
+  "Healthy control vs Diabetic Nephropathy"
+)
+
+tbl_ID <- "tbl-HV-vs-DN"
+
+tbl <- Hv_v_DN_treat %>%
+  dplyr::filter(Significant == TRUE) %>%
+  dplyr::select(-c("start", "end", "width", "detected")) %>%
+  reactable(
+    filterable = TRUE,
+    columns = list(
+      seqnames = colDef("Chr", maxWidth = 70),
+      logFC = colDef(format = colFormat(digits = 2)),
+      unshrunk.logFC = colDef(show = FALSE),
+      Significant = colDef(show = FALSE),
+      PValue = colDef(
+        cell = \(value) format_p(value)
+      ),
+      FDR = colDef(
+        cell = \(value) format_p(value)
+      ),
+      logCPM = colDef(
+        cell = \(value) format_p(value))
+    ),
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', 'HVvsDNdge.csv')")
+    ),
+    tags$br(), cp,
+    tbl
+  )
+)
+
+
+
+```
+
+## Type 2 Diabetes vs Diabetic Nephropathy
+
+```{r T2D-vs-DN}
+
+T2D_v_DN_treat <- glmTreat(fit, contrast = contrastMatrix[, "T2D_v_DN"], lfc = log2(1.5)) %>%
+topTags(n = Inf) %>%
+  pluck("table") %>%
+  as_tibble() %>%
+   mutate(Significant = PValue < 0.05) %>%
+    mutate(direction = case_when(
+    Significant == TRUE & logFC > 0 ~ "Up",
+    Significant == TRUE & logFC < 0 ~ "Down",
+    Significant == FALSE ~ "NotSignificant")
+    )
+
+T2D_v_DN_treat  %>%
+  summarise(
+    n = dplyr::n(),
+    .by = direction
+  ) %>% 
+  dplyr::rename_with(str_to_title) %>% 
+  pander(
+    justify = "lr",
+    caption = "Summary of significant DE genes by direction"
+  )
+
+```
+
+### MA plot
+```{r T2D-v-DN-MA-plot }
+MA_T2D_v_DN_treat <- T2D_v_DN_treat %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction,
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  geom_smooth(method = "glm", colour = "#386CB0") +
+  ggtitle("Type 2 Diabetes vs Diabetic nephropathy MA plot")
+MA_T2D_v_DN_treat
+
+```
+
+### Volcano plot
+```{r T2D-v-DN-Vol-plot}
+vol_T2D_v_DN_treat <- T2D_v_DN_treat %>%
+  ggplot(aes(
+    x = logFC,
+    y = -log10(PValue)
+  )) + 
+  theme_bw()+
+  geom_point(aes(colour = direction, 
+                 alpha = logCPM, 
+                 #size = logCPM, 
+                 text = paste(gene_name)
+                 )) +
+  scale_colour_manual(values = c("#BEAED4", "black", "#7FC97F")) +
+  scale_alpha(range = c(0.3, 1)) +
+  #scale_size(range = c(1, 4)) + 
+  ggtitle("T2D vs Dibetic nephropathy volcano plot")
+# ggplotly(vol_Hv_v_T2D_treat, tooltip = c("text", "logCPM"))
+
+vol_T2D_v_DN_treat
+
+
+```
+
+### Summary of DEG's 
+
+```{r T2D-vs-DN-DEG-summary}
+
+cp <- htmltools::tags$caption(
+  "Type 2 Diabetes vs Diabetic Nephropathy"
+)
+
+tbl_ID <- "tbl-T2D-vs-DN"
+
+tbl <- Hv_v_DN_treat %>%
+  dplyr::filter(Significant == TRUE) %>%
+  dplyr::select(-c("start", "end", "width", "detected")) %>%
+  reactable(
+    filterable = TRUE,
+    columns = list(
+      seqnames = colDef("Chr", maxWidth = 70),
+      logFC = colDef(format = colFormat(digits = 2)),
+      unshrunk.logFC = colDef(show = FALSE),
+      Significant = colDef(show = FALSE),
+      PValue = colDef(
+        cell = \(value) format_p(value)
+      ),
+      FDR = colDef(
+        cell = \(value) format_p(value)
+      ),
+      logCPM = colDef(
+        cell = \(value) format_p(value))
+    ),
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', 'T2DvsDNdge.csv')")
+    ),
+    tags$br(), cp,
+    tbl
+  )
+)
+
+
+```
+
+## Next Steps.
+
+We were slightly concerned by the linear fit of the MA plot when comparing the type 2 diabetic samples with each of the other conditions. Specifically a slope is observed - as opposed to a horizontal fit where Y-intercept = 0. 
+
+Due to this we tried an alternate method of normalization. 

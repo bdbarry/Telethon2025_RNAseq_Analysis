@@ -1,0 +1,147 @@
+---
+title: "GOseq"
+author: "Ben Barry"
+date: "2025-04-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load-packages}
+library(tidyverse)
+library(edgeR)
+library(goseq)
+library(here)
+library(msigdbr)
+library(SummarizedExperiment)
+library(Matrix)
+library(pander)
+```
+
+```{r load-data}
+RUV_Hv_V_DN <- read_tsv(here("data/processed", "RUV_Hv_V_DN.tsv"))
+
+RUV_Hv_V_T2D <- read_tsv(here("data/processed", "RUV_Hv_V_T2D.tsv"))
+
+RUV_T2D_V_DN <- read_tsv(here("data/processed", "RUV_T2D_V_DN.tsv"))
+```
+
+## GOseq
+GOseq is similar to over representation analysis and is designed to perform Gene Ontology (GO) and pathway enrichment analysis, however fundamentally it corrects for gene length bias. It models the probability of differential expression as a function of gene length to provide more accurate enrichment results compared to traditional methods.
+
+For this analysis we used pathways and gene ontology from the `msigdbr` - specifically selecting KEGG, REACTOME as well as the "Biological processes" and "Molecular functions" GO terms. 
+
+```{r msigdbr}
+
+msigdbr_df <- msigdbr(species = "Homo sapiens") %>%
+  dplyr::filter(
+      gs_cat == "H" | gs_subcat %in% c("CP:KEGG", "CP:REACTOME", "GO:BP, GO:MF") #, "IMMUNESIGDB"
+  )
+
+
+msigdbr_df %>%
+  distinct(gs_name, .keep_all = TRUE) %>%
+  summarise(n = n(), .by = ends_with("cat"))
+
+gs_by_gene_id <- msigdbr_df %>% 
+  split(.$ensembl_gene) %>% 
+  lapply(pull, "gs_name")
+
+```
+
+## Healhty control vs Type 2 diabetes. 
+
+For this analysis and all those subsequent we used the RUVg normalised counts.
+GOSeq requires:
+1. a list of significant gene IDs
+2. The length of each gene
+3. calculated weighting based on length `nullp()`
+
+```{r GOseq-HV-vs-T2D}
+genes <- RUV_Hv_V_T2D %>%
+  mutate(Significant = setNames(Significant, gene_id)) %>%
+  pluck("Significant") %>%
+  setNames(str_remove(names(.), "\\.[0-9]+$"))
+
+gene_lengths <- as.vector(RUV_Hv_V_T2D$gene_length)
+
+pwf <- nullp(genes, bias.data = log10(gene_lengths),
+             plot.fit=FALSE
+             )
+
+goseq_df <- goseq(pwf, genome = "hg38", gene2cat = gs_by_gene_id)  %>% 
+  as_tibble() %>% 
+  dplyr::select(-starts_with("under")) %>% 
+  mutate(adj_p = p.adjust(over_represented_pvalue, "bonferroni"))
+
+goseq_df %>%
+  filter(adj_p < 0.05) %>%
+  select(c(category, adj_p)) %>%
+  pander(
+    justify = "lr",
+    caption = "Significant go terms and pathways in Healhty control vs Type 2 diabetes"
+  )
+
+
+```
+
+## Healthy control vs. Diabetic Nephropathy.
+
+
+```{r GOseq-HV-vs-DN}
+genes <- RUV_Hv_V_DN %>%
+  mutate(Significant = setNames(Significant, gene_id)) %>%
+  pluck("Significant") %>%
+  setNames(str_remove(names(.), "\\.[0-9]+$"))
+
+gene_lengths <- as.vector(RUV_Hv_V_DN$gene_length)
+
+pwf <- nullp(genes, bias.data = log10(gene_lengths),
+             plot.fit=FALSE
+             )
+
+goseq_df <- goseq(pwf, genome = "hg38", gene2cat = gs_by_gene_id)  %>% 
+  as_tibble() %>% 
+  dplyr::select(-starts_with("under")) %>% 
+  mutate(adj_p = p.adjust(over_represented_pvalue, "bonferroni"))
+
+goseq_df %>%
+  filter(adj_p < 0.05) %>%
+  select(c(category, adj_p)) %>%
+  pander(
+    justify = "lr",
+    caption = "Significant go terms and pathways in Healhty control vs Diabetic Nephropathy"
+  )
+
+
+```
+
+## Type 2 diabetes vs. Diabetic Nephropathy
+```{r GOseq-T2D-vs-DN}
+genes <- RUV_T2D_V_DN %>%
+  mutate(Significant = setNames(Significant, gene_id)) %>%
+  pluck("Significant") %>%
+  setNames(str_remove(names(.), "\\.[0-9]+$"))
+
+gene_lengths <- as.vector(RUV_T2D_V_DN$gene_length)
+
+pwf <- nullp(genes, bias.data = log10(gene_lengths),
+             plot.fit=FALSE
+             )
+
+goseq_df <- goseq(pwf, genome = "hg38", gene2cat = gs_by_gene_id)  %>% 
+  as_tibble() %>% 
+  dplyr::select(-starts_with("under")) %>% 
+  mutate(adj_p = p.adjust(over_represented_pvalue, "bonferroni"))
+
+goseq_df %>%
+  filter(adj_p < 0.05) %>%
+  select(c(category, adj_p)) %>%
+  pander(
+    justify = "lr",
+    caption = "Significant go terms and pathways in Type 2 diabetes vs Diabetic Nephropathy"
+  )
+
+```

@@ -1,0 +1,209 @@
+---
+title: "LoadTranformCountData"
+author: "Ben Barry"
+date: "2025-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+```{r load-libraries}
+library(tidyverse)
+library(extraChIPs)
+library(edgeR)
+library(magrittr)
+library(patchwork)
+library(limma)
+library(here)
+library(rtracklayer)
+library(plyranges)
+```
+
+## Introduction
+Raw count data was obtained from 'GSE154881'. This data contains 15 samples from 3 disease states, healthy, type 2 Diabetic and Diabetic Nephropathy. Methodological information can be found at the GEO site, however, of note a RIN score of >5 was used as the threshold for RNA quality, this is rather low and may reflect downstream QC decisions. 
+
+### count matrix
+
+```{r loading data}
+# create a count matrix
+count_matrix <- read_tsv(here::here("data/raw/GSE154881_All_blood.txt")) %>% 
+  dplyr::filter(str_starts(Geneid, "ENSG")) %>% #keep all rows in GeneID column which start with "ENSG"
+  as.data.frame() %>% # convert to data frame
+  column_to_rownames("Geneid") %>% # convert "GeneID" to rownames
+  as.matrix() # convert to matrix.
+keep <- rowSums(count_matrix, na.rm = TRUE) > 0 & !is.na(rowSums(count_matrix)) # keep counts which are greater than 0 and not NA.
+head(count_matrix[keep,])
+
+```
+
+Following download of data, an initial parameter was set to only keep transcripts whose counts were greater than 0. A count matrix with `r ncol(count_matrix)` samples and `r nrow(count_matrix)` was saved locally.
+
+### metadata
+Meta data was also extracted and saved locally
+
+```{r metadata}
+#create a metadata table
+GSE154881_metaData <- tibble(
+  sampleName = colnames(count_matrix)
+) %>% 
+  mutate(
+    disease_state = case_when(
+      #make treatment "healthy_volunteer" if contains hv
+      grepl("HV", sampleName) ~ "healthy_volunteer", 
+      #make treatment "Diabetic_nephropathy" if contains dn
+      grepl("DN", sampleName) ~ "Diabetic_nephropathy", 
+      #make treatment "type2_diabetes" if contains dn
+      grepl("T2D", sampleName) ~ "type2_diabetes" 
+    ) %>%  
+      factor(levels = c("healthy_volunteer", "type2_diabetes", "Diabetic_nephropathy"))
+  )
+
+head(GSE154881_metaData)
+```
+### gene name annotation
+
+Despite the methods stating that raw counts were calculated using a GTF file from GENCODEv23, debugging revealed that this was an error and should have been GENCODEv34. Exon gene lengths were then calculated by merging exon ranges which overlap and finding the total exon length. This was performed for use in downstream analysis. 
+
+```{r }
+GencodeV34 <- import.gff(here::here("data/raw/gencode.v34.chr_patch_hapl_scaff.annotation.gtf"))
+
+gene_lengths <- GencodeV34 %>% 
+  subset(type == "exon") %>%   # keep only exons
+  split(.$gene_id) %>%        # similar to "group_by" in tidyverse
+  reduce() %>%                # merges exon ranges that fall within others. eg. 2:5 and 1:7 becomes 1:7
+  width() %>%                 # calculate the length of the each of ranges
+  map_int(sum)                # calculates the total exon length
+
+gene_lengths[1:10]
+
+```
+### summarised object
+
+the data described thus far was compiled into a summarized experiment (SE) object for ease of handling. Metadata was assigned to the colData element of the the SE object and gene annotations assigned to the RowRanges obejct. 
+LogCPM were calculated and assinged to a new Assay within the SE object. A detection parameter was also added where CPM values aught to be greater than 1 and the row total > 5 
+
+```{r summarisedExperimentObject}
+se <- SummarizedExperiment(                    # create a summarisedExperiment object
+  assays = list(counts = count_matrix[keep,]), # add the countmatrix as an assay
+  colData = GSE154881_metaData                 # add the metadata
+)
+
+# add gene annotations to SE object
+rowRanges(se) <- GencodeV34 %>% 
+  subset(type == "gene") %>%                      #keep only genes
+  select(starts_with("gene")) %>%                 #keep only the columns which starts with "gene"
+  mutate(gene_length = gene_lengths[gene_id]) %>% #create a new columns called gene_length using the vector from                                                         gene_lengths
+  setNames(nm = mcols(.)$gene_id) %>%             #set name using the column names from gene_id in gencodeV34 
+  .[rownames(se)]                                 #reorder the GencodeV34 to match rownames in se
+
+#add a logCPM column to the assay
+assay(se, "logCPM") <- cpm(se, log = TRUE)
+
+# create a columns within rowData of se called detected where all values must be greater than 1 and the row sum must be greater than or equal to 5
+rowData(se)$detected <- se %>% 
+  cpm() %>% 
+  is_greater_than(1) %>% 
+  rowSums() %>% 
+  is_weakly_greater_than(5)
+
+glimpse(se)
+```
+### Log CPM plots
+Log CPM was then plotted using 'ExtrChIps' to observe variation between donors and disease states.
+First we utilized `plotAssayDensities` to visualize the kernel density estimates - in essence this provides a smoothed histogram. Here we would expect each sample to exhibit a similar distribution of read counts.
+```{r Figure1:DensityPlot}
+library(RColorBrewer)
+se %>% 
+  subset(detected) %>% 
+  plotAssayDensities(assay = "logCPM", colour = "disease_state", size = 1) + 
+  theme_bw() +
+  xlim(c(-5, 20)) +
+  scale_colour_brewer(palette = "Accent")
+
+```
+
+### Relative Log Expression
+
+From this density plot it appears that there are two samples from the "healthy_volunteer" cohort which appear to have a negatively skewed LogCPM, i.e. a high frequency of low counts. To further interrogate this we next plotted the relative log expression (RLE). This performs a Log1p transformation of the data and presents the results as a boxplot, allowing for visualization of variance. 
+
+
+```{r RlePlot}
+
+se %>% 
+  subset(detected) %>% 
+  plotAssayRle(assay = "logCPM", fill = "disease_state") + 
+  theme_bw() +
+  scale_fill_brewer(palette = "Accent")
+
+se %>% 
+  subset(detected) %>% 
+  plotAssayRle(assay = "logCPM", fill = "disease_state", by_x = "disease_state") +
+  theme_bw() +
+  scale_fill_brewer(palette = "Accent")
+
+```
+These plots illustrate the variance within these data, in particular, highlighting samples 3 and 4 from the healthy volunteer cohort (HV_3, HV_4) as exhibiting substantial variance. 
+
+### Principal Component Analysis (PCA)
+
+To gain further insight into this observed variance, PCA was performed on the LogCPM data to understand the variance which may be contributed by HV_3 and HV_4.  
+
+
+```{r PCA}
+se %>%
+  subset(detected) %>%
+  plotAssayPCA(
+    assay = "logCPM", 
+    colour =  "disease_state", label = "sample",
+    pc_x = 1, pc_y = 2
+  ) +
+  geom_point(shape = 1,size = 2,colour = "black") + 
+  theme_bw() +
+  scale_colour_brewer(palette = "Accent")
+```
+Here we observed that HV_3 and HV_4 segregate along PC1, the component which explains 56% of the variance in the data. This indicates that the these samples contribute the most to the observed variance in the data.
+
+Collectively these analysis provide a sound indication that these samples may not be an accurate representation of the healthy volunteer sample and therefor population. Although challenging to definitively determine why this may be, the low RIN threshold may explain these low counts.  
+
+### TMM Normalisation
+
+Next we explored whether this observed variance could be mitigated by TMM normalization.
+
+```{r TMMnorm}
+
+se_detected <- subset(se, detected) 
+
+assay(se_detected, "TMM_logCPM") <- se_detected %>% 
+  calcNormFactors("TMM") %>% 
+  cpm(log = TRUE)
+
+se_detected %>%
+  plotAssayRle(assay = "TMM_logCPM", fill = "disease_state") +
+  theme_bw() +
+  scale_fill_brewer(palette = "Accent")
+
+
+se_detected %>%
+  plotAssayPCA(assay = "TMM_logCPM",
+               colour =  "disease_state",
+               label = "sampleName",
+               pc_x = 1,
+               pc_y = 2) + 
+  scale_colour_brewer(palette = "Accent") +
+  geom_point(shape = 1,size = 2,colour = "black")
+```
+
+RLE plot reveals that HV_3 and HV_4 still exhibit relative large variance (indicated by their mean deviating from 0)
+Similarly PCA reveals these two samples still contribute to variance in the data, even after normalization. 
+
+Ultimately this has led to the descion to exclude these two sample from further analysis. 
+
+
+```{r}
+se_detected <- subset(se, detected) 
+SE_outlier_removed <- se_detected[, !se_detected$sampleName %in% c("HV_3", "HV_4")]
+
+```

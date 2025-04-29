@@ -1,0 +1,190 @@
+---
+title: "GSEA"
+author: "Ben Barry"
+date: "2025-04-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load-libraries}
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(here)
+library(clusterProfiler)
+library(purrr)
+library(reactable)
+library(readr)
+library(msigdbr)
+library(reactable)
+library(htmltools)
+```
+
+```{r load-data}
+RUV_Hv_V_DN <- read_tsv(here("data/processed", "RUV_Hv_V_DN.tsv"))
+
+RUV_Hv_V_T2D <- read_tsv(here("data/processed", "RUV_Hv_V_T2D.tsv"))
+
+RUV_T2D_V_DN <- read_tsv(here("data/processed", "RUV_T2D_V_DN.tsv"))
+```
+
+## Gene Set Enrichment Analysis (GSEA)
+Similar to ORA, GSEA determines whether predefined sets of genes (e.g., pathways or functional categories) show statistically significant, coordinated differences between two samples. Unlike ORA which uses a user-defined list (eg. significantly DE), GSEA analyzes the entire ranked list of genes to detect subtle but consistent expression changes across a gene set.
+For this analysis we will use the same MSIGBD collections
+
+```{r msigdbr}
+
+msigdbr_df <- msigdbr(species = "Homo sapiens") %>%
+  dplyr::filter(
+      gs_cat == "H" | gs_subcat %in% c("CP:KEGG", "CP:REACTOME", "GO:BP, GO:MF") #, "IMMUNESIGDB"
+  )
+
+```
+
+## Healthy control Vs. Type 2 diabetes. 
+
+```{r GSEA-Hv_V_T2D}
+
+geneRanks <- RUV_Hv_V_T2D %>%
+  mutate(
+    ensemble_id = str_remove(gene_id, "\\.[0-9]+$"),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %>%
+  arrange(desc(signed)) %>% 
+  pluck("signed")
+
+terms <- msigdbr_df %>%
+  dplyr::select(gs_name, ensembl_gene)
+
+x <- GSEA(geneRanks,
+     TERM2GENE = terms,
+     pAdjustMethod = "bonferroni"
+     )
+
+
+cp <- htmltools::tags$caption(
+  "Healthy control Vs. Type 2 diabetes."
+)
+
+tbl_ID <- "GSEA-Hv-V-T2D"
+
+GSEA_tbl <- x %>%
+  pluck("result") %>%
+  dplyr::select(enrichmentScore, NES, p.adjust) %>%
+  reactable(
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', '{tbl_ID}.csv')")
+    ),
+    tags$br(), cp,
+    GSEA_tbl
+  )
+)
+```
+
+
+
+
+## Healthy control Vs. Diabetic Nephropathy. 
+
+```{r GSEA-Hv_V_DN}
+
+geneRanks <- RUV_Hv_V_DN %>%
+  mutate(
+    ensemble_id = str_remove(gene_id, "\\.[0-9]+$"),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %>%
+  arrange(desc(signed)) %>% 
+  pluck("signed")
+
+terms <- msigdbr_df %>%
+  dplyr::select(gs_name, ensembl_gene)
+
+x <- GSEA(geneRanks,
+     TERM2GENE = terms,
+     pAdjustMethod = "bonferroni"
+     )
+
+
+cp <- htmltools::tags$caption(
+  "Healthy control Vs. Diabetic Nephropathy"
+)
+
+tbl_ID <- "GSEA-Hv-V-DN"
+
+GSEA_tbl <- x %>%
+  pluck("result") %>%
+  dplyr::select(enrichmentScore, NES, p.adjust) %>%
+  reactable(
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', '{tbl_ID}.csv')")
+    ),
+    tags$br(), cp,
+    GSEA_tbl
+  )
+)
+```
+
+
+## Type 2 Diabetes Vs. Diabetic Nephropathy. 
+
+```{r GSEA-T2D_V_DN}
+
+geneRanks <- RUV_T2D_V_DN%>%
+  mutate(
+    ensemble_id = str_remove(gene_id, "\\.[0-9]+$"),
+    signed = setNames(-1 * sign(logFC) * log10(PValue), ensemble_id)
+    ) %>%
+  arrange(desc(signed)) %>% 
+  pluck("signed")
+
+terms <- msigdbr_df %>%
+  dplyr::select(gs_name, ensembl_gene)
+
+x <- GSEA(geneRanks,
+     TERM2GENE = terms,
+     pAdjustMethod = "bonferroni"
+     )
+
+
+cp <- htmltools::tags$caption(
+  "Type 2 Diabetes Vs. Diabetic Nephropathy"
+)
+
+tbl_ID <- "GSEA-T2D-V-DN"
+
+GSEA_tbl <- x %>%
+  pluck("result") %>%
+  dplyr::select(enrichmentScore, NES, p.adjust) %>%
+  reactable(
+    theme = reactableTheme(style = list(fontSize = 12)),
+    elementId = tbl_ID
+  )
+
+browsable(
+  tagList(
+    tags$button(
+      tagList(fontawesome::fa("download"), "Download as CSV"),
+      onclick = glue::glue("Reactable.downloadDataCSV('{tbl_ID}', '{tbl_ID}.csv')")
+    ),
+    tags$br(), cp,
+    GSEA_tbl
+  )
+)
+```

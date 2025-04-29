@@ -1,29 +1,29 @@
 name: 'Analysis of Type 2 diebetic, Diabetic nerphopathy and Healthy blood'
 output_dir: ../docs
 navbar:
-  title: "test title"
+  title: "Type 2 diabetes analysis (Bulk RNA)"
   left:
   - icon: fa-home
     text: Home
     href: index.html
   - text: Raw data QC
     menu:
-    - text: "test QC"
-      href: attempt1.html
-  - text: "Differential expression"
+    - text: "Intial load and data transformation"
+      href: LoadTranformCountData.html
+    - text: "removal of low quality samples"
+      href: LowCountSampleRemoval.html
+  - text: "Differential Gene Expression Analysis (DGEA)"
     menu:
-    - text: "Healthy vs diabetes"
-      href: HVvsT2D.html
-    - text: "Healthy vs Diabetic nephropathy"
-      href: HVvsDN.html
-    - text: "Diabetic nephropathy vs diabetes"
-      href: DNvsT2D.html
+    - text: "Tmm Normalised Data"
+      href: TmmDGEA.html
+    - text: "RUVg Normalised Data"
+      href: RUVgNorm.html
   - text: "enrichment analysis"
     menu:
-    - text: "method 1"
-      href: method1.html
-    - text: "method 2"
-      href: method2.html
+    - text: "Goseq"
+      href: GOseq.html
+    - text: "GSEA"
+      href: GSEA.html
   right:
   - icon: fa-github
     href: https://github.com/bdbarry/Telethon2025_RNAseq_Analysis

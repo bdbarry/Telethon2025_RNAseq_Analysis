@@ -36,6 +36,8 @@ SE_outlier_removed <- read_rds("/Users/benbarry/Documents/Telethon2025/data/proc
 
 ```
 
+
+
 ```{r DesignMatrix}
 
 # creating the design matrix for analysis
@@ -361,10 +363,6 @@ plotAssayPCA(
   label = "sampleName")
 ```
 
-Based on the RLE and PCA plots fro ruvg normalization its unlikely that RUVG is necessary.  
-
-none-the-less here  we have a quick look at healthy vs T2D. 
-
 ```{r ruvg_normalised_genes}
 RUV_T2D_V_DN <- glmTreat(RUVg_fit, contrast = RUVg_contrasts[, "T2D_v_DN"],  lfc = log2(1.5)) %>%
 topTags(n = Inf) %>%
@@ -384,6 +382,21 @@ topTags(n = Inf) %>%
   pluck("table") %>%
   as_tibble() %>%
   mutate(Significant = PValue < 0.05) 
+
+```
+
+
+
+```{r}
+RUV_Hv_V_T2D %>%
+  ggplot(aes(
+    x = logCPM,
+    y = logFC
+    )
+  ) + 
+  geom_point(aes(colour = Significant)) +
+  geom_smooth(method = 'lm', se = FALSE) +
+  scale_colour_manual(values = c("black", "red"))
 
 
 

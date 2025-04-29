@@ -1,0 +1,97 @@
+---
+title: "Removal of low quality samples"
+author: "Ben Barry"
+date: "2025-04-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load_Libraries}
+library(tidyverse)
+library(extraChIPs)
+library(here)
+library(edgeR)
+library(patchwork)
+```
+
+
+
+### Removal of HV_3 and HV_4
+
+As determiend previously, normalisation was not sufficient to remove the variance present in the count data introduced by the HV_3 and HV_4 samples. Hence it was decided to exckude these samples from further analyses.
+
+```{r}
+SE_outlier_removed <- read_rds(here::here("data/processed/SE_outlier_removed.rds"))
+
+
+```
+
+
+### TMM normalisation
+With these sampel exclused we normaliased the count data again and plotted these data using Density, RLE and PCA.
+
+```{r TMMnormalisation}
+
+#calc normalisation factors using TMM
+assay(SE_outlier_removed, "TmmNorm") <- SE_outlier_removed %>% 
+  calcNormFactors(method = "TMM") %>% 
+  cpm(log = TRUE)
+
+RLE_A <- SE_outlier_removed %>% 
+  plotAssayRle(assay = "TmmNorm", fill = "disease_state") + 
+  theme_bw() + 
+  scale_fill_brewer(palette = "Accent")
+
+RLE_B <- SE_outlier_removed%>% 
+  plotAssayRle(
+    assay = "TmmNorm", fill = "disease_state", by_x = "disease_state") +
+  theme_bw() + 
+  scale_fill_brewer(palette = "Accent")
+
+RLE_A + RLE_B +
+  plot_layout(guides = "collect", axes = "collect") &
+  theme(legend.position = "bottom")
+
+
+
+
+PCA_A <- SE_outlier_removed %>% 
+  plotAssayPCA(
+    assay = "TmmNorm",
+    colour =  "disease_state",
+    label = "sampleName",
+    pc_x = 1,
+    pc_y = 2
+    ) +
+  geom_point(shape = 1,size = 2,colour = "black") + 
+  scale_colour_brewer(palette = "Accent") + 
+  theme_bw()
+
+PCA_B <- SE_outlier_removed %>% 
+  plotAssayPCA(
+    assay = "TmmNorm",
+    colour =  "disease_state",
+    label = "sampleName",
+    pc_x = 2,
+    pc_y = 3
+    ) +
+  geom_point(shape = 1,size = 2,colour = "black") + 
+  scale_colour_brewer(palette = "Accent") + 
+  theme_bw()
+  
+
+PCA_A + PCA_B +
+  plot_layout(guides = "collect", axes = "collect") &
+  theme(legend.position = "bottom")
+
+
+```
+
+
+Here we observed that removal of HV_3 and HV_4 prior to TMM normalisation appeares to reduce the varience present in the count data across all samples more effectivly. 
+
+From here we moved on to Differential gene expression analysis using `EdgeR`
+
